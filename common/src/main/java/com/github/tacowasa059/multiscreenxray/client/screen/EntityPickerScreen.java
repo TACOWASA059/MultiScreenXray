@@ -86,16 +86,18 @@ final class EntityPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        graphics.fillGradient(0, 0, width, height, 0xFF101A26, 0xFF070B11);
         int panelX = gridX - 8;
         graphics.fill(panelX, 4, gridX + gridWidth + 8, height - 3, PANEL);
         graphics.fill(panelX, 4, gridX + gridWidth + 8, 6, 0xFF13677D);
+        // Screen renders the active blur before its widgets. Draw the custom
+        // library after that pass so its labels and item icons stay sharp.
+        super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawString(font, "ENTITY LIBRARY", gridX, 11, ACCENT, false);
         String count = selected.size() + " SELECTED";
         graphics.drawString(font, count, gridX + gridWidth - font.width(count), 11, 0xFF9AABBD, false);
         renderQuickOptions(graphics, mouseX, mouseY);
         renderEntityRows(graphics, mouseX, mouseY);
-        super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     private void renderQuickOptions(GuiGraphics graphics, int mouseX, int mouseY) {

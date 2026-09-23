@@ -1,3 +1,7 @@
+## 1.0.2
+
+- Kept block and entity library icons and labels sharp on blurred menu backgrounds.
+
 ## 1.0.1
 
 - Added Minecraft 1.20.4 support for Fabric, Forge, and NeoForge.
