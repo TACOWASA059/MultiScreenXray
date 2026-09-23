@@ -42,19 +42,21 @@ public abstract class LevelRendererMixin {
     }
 
     @Inject(method = "renderSky", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipSky(PoseStack poseStack, Matrix4f projectionMatrix,
+    private void multiscreenxray$skipSky(Matrix4f frustumMatrix, Matrix4f projectionMatrix,
             float partialTick, Camera camera, boolean isFoggy, Runnable skyFogSetup, CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
     }
 
     @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipTerrain(RenderType renderType, PoseStack poseStack,
-            double camX, double camY, double camZ, Matrix4f projectionMatrix, CallbackInfo callback) {
+    private void multiscreenxray$skipTerrain(RenderType renderType,
+            double camX, double camY, double camZ, Matrix4f frustumMatrix,
+            Matrix4f projectionMatrix, CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
     }
 
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipClouds(PoseStack poseStack, Matrix4f projectionMatrix,
+    private void multiscreenxray$skipClouds(PoseStack poseStack, Matrix4f frustumMatrix,
+            Matrix4f projectionMatrix,
             float partialTick, double camX, double camY, double camZ, CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
     }

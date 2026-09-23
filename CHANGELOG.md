@@ -1,6 +1,8 @@
 ## 1.0.1
 
+- Added Minecraft 1.21.1 support for Fabric, Forge, and NeoForge.
 - Added Minecraft 1.20.4 support for Fabric, Forge, and NeoForge.
+- Kept block and entity library icons and labels sharp on blurred menu backgrounds.
 - Fixed entity and hand projection when the main and X-ray windows use different sizes or aspect ratios.
 - Synchronized sprint FOV changes across blocks, fluids, outlines, entities, and the player hand.
 - Registered F8 and F9 in Minecraft's key binding settings.

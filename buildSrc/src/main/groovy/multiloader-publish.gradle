@@ -16,17 +16,13 @@ if (changelogFile.exists()) {
     releaseNotes = section.find() ? section.group(1).trim() : releaseNotes
 }
 
-def uploadTask = loader == 'fabric' ? 'remapJar' : loader == 'forge' ? 'reobfJar' : 'jar'
+def uploadTask = loader == 'fabric' ? 'remapJar' : 'jar'
 def uploadJar = loader == 'fabric'
         ? tasks.named('remapJar')
-        : loader == 'forge'
-        ? file("${buildDir}/libs/${mod_id}-${loader}-${minecraft_version}-${version}.jar")
         : tasks.named('jar')
 def resolveUploadFile = {
     loader == 'fabric'
             ? tasks.named('remapJar').get().archiveFile.get().asFile
-            : loader == 'forge'
-            ? uploadJar
             : tasks.named('jar').get().archiveFile.get().asFile
 }
 

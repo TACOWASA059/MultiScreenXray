@@ -2,14 +2,12 @@ package com.github.tacowasa059.multiscreenxray.neoforge;
 
 import com.github.tacowasa059.multiscreenxray.client.MultiScreenXrayKeyMappings;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 
 @Mod("multiscreenxray")
 public final class MultiScreenXrayNeoForge {
-    public MultiScreenXrayNeoForge() {
-        IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+    public MultiScreenXrayNeoForge(IEventBus modBus) {
         modBus.addListener(this::registerKeyMappings);
     }
 

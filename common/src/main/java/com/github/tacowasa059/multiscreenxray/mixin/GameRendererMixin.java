@@ -1,7 +1,6 @@
 package com.github.tacowasa059.multiscreenxray.mixin;
 
 import com.github.tacowasa059.multiscreenxray.client.render.XrayOverlayPass;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,8 +23,8 @@ public abstract class GameRendererMixin {
     }
 
     @Inject(method = "renderItemInHand", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$filterHand(PoseStack poseStack, Camera camera,
-            float partialTick, CallbackInfo callback) {
+    private void multiscreenxray$filterHand(Camera camera, float partialTick,
+            Matrix4f projectionMatrix, CallbackInfo callback) {
         if (XrayOverlayPass.active() && !XrayOverlayPass.showHand()) callback.cancel();
     }
 }

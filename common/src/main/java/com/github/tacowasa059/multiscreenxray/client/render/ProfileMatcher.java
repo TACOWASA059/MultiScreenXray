@@ -50,8 +50,8 @@ public final class ProfileMatcher {
         for (String selector : selectors) {
             if (selector.equals("*")) all = true;
             else if (selector.startsWith("#"))
-                blockTags.add(TagKey.create(Registries.BLOCK, new ResourceLocation(selector.substring(1))));
-            else blockIds.add(new ResourceLocation(selector));
+                blockTags.add(TagKey.create(Registries.BLOCK, ResourceLocation.parse(selector.substring(1))));
+            else blockIds.add(ResourceLocation.parse(selector));
         }
         return all;
     }
@@ -61,8 +61,8 @@ public final class ProfileMatcher {
         for (String selector : selectors) {
             if (selector.equals("*")) all = true;
             else if (selector.startsWith("#"))
-                entityTags.add(TagKey.create(Registries.ENTITY_TYPE, new ResourceLocation(selector.substring(1))));
-            else entityIds.add(new ResourceLocation(selector));
+                entityTags.add(TagKey.create(Registries.ENTITY_TYPE, ResourceLocation.parse(selector.substring(1))));
+            else entityIds.add(ResourceLocation.parse(selector));
         }
         return all;
     }
