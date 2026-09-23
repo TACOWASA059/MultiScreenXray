@@ -13,7 +13,7 @@ import org.joml.Matrix4f;
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin {
     @Inject(method = "getProjectionMatrix", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$matchWindowProjection(double fieldOfView,
+    private void multiscreenxray$matchWindowProjection(float fieldOfView,
             CallbackInfoReturnable<Matrix4f> callback) {
         if (XrayOverlayPass.active()) {
             XrayOverlayPass.captureWorldFov(fieldOfView);
@@ -23,7 +23,7 @@ public abstract class GameRendererMixin {
     }
 
     @Inject(method = "renderItemInHand", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$filterHand(Camera camera, float partialTick,
+    private void multiscreenxray$filterHand(float partialTick, boolean sleeping,
             Matrix4f projectionMatrix, CallbackInfo callback) {
         if (XrayOverlayPass.active() && !XrayOverlayPass.showHand()) callback.cancel();
     }

@@ -5,8 +5,10 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.BlockModelPart;
+import net.minecraft.client.renderer.block.model.BlockStateModel;
 import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -22,6 +24,7 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Vector3fc;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -179,7 +182,7 @@ public final class XrayWorldRenderer implements AutoCloseable {
         if (minecraft.level == null || !camera.isInitialized()) {
             return;
         }
-        Vec3 position = camera.getPosition();
+        Vec3 position = camera.position();
         int chunkX = SectionPos.blockToSectionCoord(position.x);
         int chunkZ = SectionPos.blockToSectionCoord(position.z);
         int blockY = (int) Math.floor(position.y);
@@ -207,8 +210,8 @@ public final class XrayWorldRenderer implements AutoCloseable {
         Matrix4f matrix = new Matrix4f()
                 .perspective((float) Math.toRadians(fieldOfView),
                         (float) width / height, 0.05f, 256f)
-                .rotateX((float) Math.toRadians(camera.getXRot()))
-                .rotateY((float) Math.toRadians(camera.getYRot() + 180f))
+                .rotateX((float) Math.toRadians(camera.xRot()))
+                .rotateY((float) Math.toRadians(camera.yRot() + 180f))
                 .translate(-(float) (position.x - originX),
                         -(float) (position.y - originY),
                         -(float) (position.z - originZ));
@@ -230,7 +233,8 @@ public final class XrayWorldRenderer implements AutoCloseable {
         GL20.glUniform1f(oreBrightnessUniform, profile.brightness);
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                minecraft.getModelManager().getAtlas(TextureAtlas.LOCATION_BLOCKS).getId());
+                GlTextureAccess.id(minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)
+                        .getTexture()));
         GL30.glBindVertexArray(vertexArray);
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, vertexCount);
         GL30.glBindVertexArray(0);
@@ -409,40 +413,37 @@ public final class XrayWorldRenderer implements AutoCloseable {
 
     private void appendModel(FloatCollector vertices, OrePosition ore) {
         BlockPos position = new BlockPos(ore.x(), ore.y(), ore.z());
-        BakedModel model = minecraft.getModelManager().getBlockModelShaper().getBlockModel(ore.state());
+        BlockStateModel model = minecraft.getModelManager().getBlockModelShaper().getBlockModel(ore.state());
         RandomSource random = RandomSource.create();
         long seed = ore.state().getSeed(position);
         random.setSeed(seed);
-        appendQuads(vertices, model.getQuads(ore.state(), null, random), ore);
-        for (Direction direction : Direction.values()) {
-            random.setSeed(seed);
-            appendQuads(vertices, model.getQuads(ore.state(), direction, random), ore);
+        for (BlockModelPart part : model.collectParts(random)) {
+            appendQuads(vertices, part.getQuads(null), ore);
+            for (Direction direction : Direction.values()) {
+                appendQuads(vertices, part.getQuads(direction), ore);
+            }
         }
     }
 
     private void appendQuads(FloatCollector vertices, Iterable<BakedQuad> quads, OrePosition ore) {
         for (BakedQuad quad : quads) {
-            int[] data = quad.getVertices();
-            int stride = data.length / 4;
-            if (stride < 6) {
-                continue;
-            }
-            appendOreVertex(vertices, data, stride, 0, ore);
-            appendOreVertex(vertices, data, stride, 1, ore);
-            appendOreVertex(vertices, data, stride, 2, ore);
-            appendOreVertex(vertices, data, stride, 0, ore);
-            appendOreVertex(vertices, data, stride, 2, ore);
-            appendOreVertex(vertices, data, stride, 3, ore);
+            appendOreVertex(vertices, quad, 0, ore);
+            appendOreVertex(vertices, quad, 1, ore);
+            appendOreVertex(vertices, quad, 2, ore);
+            appendOreVertex(vertices, quad, 0, ore);
+            appendOreVertex(vertices, quad, 2, ore);
+            appendOreVertex(vertices, quad, 3, ore);
         }
     }
 
-    private void appendOreVertex(FloatCollector vertices, int[] data, int stride, int vertex, OrePosition ore) {
-        int offset = vertex * stride;
-        vertices.add(Float.intBitsToFloat(data[offset]) + ore.x() - originX);
-        vertices.add(Float.intBitsToFloat(data[offset + 1]) + ore.y() - originY);
-        vertices.add(Float.intBitsToFloat(data[offset + 2]) + ore.z() - originZ);
-        vertices.add(Float.intBitsToFloat(data[offset + 4]));
-        vertices.add(Float.intBitsToFloat(data[offset + 5]));
+    private void appendOreVertex(FloatCollector vertices, BakedQuad quad, int vertex, OrePosition ore) {
+        Vector3fc position = quad.position(vertex);
+        long packedUv = quad.packedUV(vertex);
+        vertices.add(position.x() + ore.x() - originX);
+        vertices.add(position.y() + ore.y() - originY);
+        vertices.add(position.z() + ore.z() - originZ);
+        vertices.add(UVPair.unpackU(packedUv));
+        vertices.add(UVPair.unpackV(packedUv));
     }
 
     private void rebuildOutlines(int cameraX, int cameraY, int cameraZ) {
@@ -475,7 +476,7 @@ public final class XrayWorldRenderer implements AutoCloseable {
                     if (state.isAir() || state.getRenderShape() != RenderShape.MODEL || isOre(state)) {
                         continue;
                     }
-                    if (state.isSolidRender(level, position)) {
+                    if (state.isSolidRender()) {
                         appendExposedOutline(vertices, position, neighbor,
                                 x - originX, y - originY, z - originZ);
                     }

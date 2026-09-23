@@ -87,14 +87,14 @@ final class ExtraWindow implements AutoCloseable {
         }
         if (returnFocusRequested) {
             returnFocusRequested = false;
-            GLFW.glfwFocusWindow(minecraft.getWindow().getWindow());
+            GLFW.glfwFocusWindow(minecraft.getWindow().handle());
         }
     }
 
     void render(XrayOverlayRenderer.Frame overlayFrame) {
         if (handle == 0L) return;
         saveGeometryIfDue();
-        long mainHandle = minecraft.getWindow().getWindow();
+        long mainHandle = minecraft.getWindow().handle();
         GLCapabilities mainCapabilities = GL.getCapabilities();
         try {
             GLFW.glfwMakeContextCurrent(handle);
@@ -144,7 +144,7 @@ final class ExtraWindow implements AutoCloseable {
     }
 
     private void createWindow() {
-        long mainHandle = minecraft.getWindow().getWindow();
+        long mainHandle = minecraft.getWindow().handle();
         GLCapabilities mainCapabilities = GL.getCapabilities();
         GLFW.glfwDefaultWindowHints();
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR,

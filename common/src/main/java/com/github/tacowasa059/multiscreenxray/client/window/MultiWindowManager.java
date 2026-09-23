@@ -13,7 +13,9 @@ import org.lwjgl.opengl.GL11;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +24,7 @@ import java.nio.file.Path;
 public final class MultiWindowManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final List<ExtraWindow> WINDOWS = new ArrayList<>();
+    private static final Set<Integer> FAILED_WINDOWS = new HashSet<>();
     private static boolean addKeyDown;
     private static boolean settingsKeyDown;
     private static boolean configured;
@@ -55,6 +58,7 @@ public final class MultiWindowManager {
             if (window.shouldClose()) {
                 window.close();
                 WINDOWS.remove(index);
+                FAILED_WINDOWS.remove(window.number());
                 removed = true;
             }
         }
@@ -72,7 +76,7 @@ public final class MultiWindowManager {
         boolean settingsPressed = keyPressedInExtraWindow(GLFW.GLFW_KEY_F9);
         if (MultiScreenXrayKeyMappings.OPEN_SETTINGS.consumeClick()
                 || settingsPressed && !settingsKeyDown) {
-            GLFW.glfwFocusWindow(minecraft.getWindow().getWindow());
+            GLFW.glfwFocusWindow(minecraft.getWindow().handle());
             minecraft.setScreen(new XraySettingsScreen());
         }
         settingsKeyDown = settingsPressed;
@@ -83,8 +87,10 @@ public final class MultiWindowManager {
                 var overlayFrame = window.renderOverlay();
                 GL11.glFinish();
                 window.render(overlayFrame);
+                FAILED_WINDOWS.remove(window.number());
             } catch (RuntimeException exception) {
-                LOGGER.error("X-ray window {} render failed", window.number(), exception);
+                if (FAILED_WINDOWS.add(window.number()))
+                    LOGGER.error("X-ray window {} render failed", window.number(), exception);
             }
         } else if (pauseMenuOpen) {
             for (ExtraWindow window : WINDOWS) window.idle();
@@ -110,7 +116,11 @@ public final class MultiWindowManager {
 
     private static void reconcile(Minecraft minecraft) {
         while (WINDOWS.size() < desiredWindows) WINDOWS.add(createWindow(minecraft));
-        while (WINDOWS.size() > desiredWindows) WINDOWS.remove(WINDOWS.size() - 1).close();
+        while (WINDOWS.size() > desiredWindows) {
+            ExtraWindow removed = WINDOWS.remove(WINDOWS.size() - 1);
+            removed.close();
+            FAILED_WINDOWS.remove(removed.number());
+        }
     }
 
     private static ExtraWindow createWindow(Minecraft minecraft) {
@@ -127,6 +137,7 @@ public final class MultiWindowManager {
     public static void closeAll() {
         for (ExtraWindow window : WINDOWS) window.close();
         WINDOWS.clear();
+        FAILED_WINDOWS.clear();
     }
 
     private static boolean keyPressedInExtraWindow(int key) {
@@ -136,7 +147,7 @@ public final class MultiWindowManager {
     }
 
     private static boolean shiftPressedInAnyWindow(Minecraft minecraft) {
-        if (shiftPressed(minecraft.getWindow().getWindow())) return true;
+        if (shiftPressed(minecraft.getWindow().handle())) return true;
         for (ExtraWindow window : WINDOWS) if (shiftPressed(window.handle())) return true;
         return false;
     }
@@ -196,15 +207,15 @@ public final class MultiWindowManager {
     private static void captureVisualScreen(Minecraft minecraft, String name) {
         Path output = minecraft.gameDirectory.toPath().resolve("screenshots")
                 .resolve("multiscreenxray-gui-" + name + ".png");
-        try {
-            Files.createDirectories(output.getParent());
-            try (NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
+        Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> {
+            try (image) {
+                Files.createDirectories(output.getParent());
                 image.writeToFile(output);
+                LOGGER.info("Captured MultiScreen X-ray GUI at {}", output);
+            } catch (IOException exception) {
+                LOGGER.error("Could not capture MultiScreen X-ray GUI", exception);
             }
-            LOGGER.info("Captured MultiScreen X-ray GUI at {}", output);
-        } catch (IOException exception) {
-            LOGGER.error("Could not capture MultiScreen X-ray GUI", exception);
-        }
+        });
     }
 
 }

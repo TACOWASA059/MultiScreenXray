@@ -6,9 +6,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.Item;
@@ -53,8 +54,8 @@ final class EntityPickerScreen extends Screen {
         super(Component.literal("Select entities"));
         this.screenIndex = screenIndex;
         selected.addAll(ConfigManager.get().screen(screenIndex).entities);
-        for (ResourceLocation id : BuiltInRegistries.ENTITY_TYPE.keySet()) {
-            EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
+        for (Identifier id : BuiltInRegistries.ENTITY_TYPE.keySet()) {
+            EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(id);
             allEntities.add(new EntityEntry(id, type.getDescription(), new ItemStack(categoryIcon(type, id))));
         }
         allEntities.sort(Comparator.comparing(entry -> entry.id.toString()));
@@ -151,8 +152,8 @@ final class EntityPickerScreen extends Screen {
         EntityEntry hovered = entityAt(mouseX, mouseY, filtered, columns, visibleRows);
         if (hovered != null) {
             String state = selected.contains(hovered.id.toString()) ? "Selected - click to remove" : "Click to select";
-            graphics.renderTooltip(font, List.of(Component.literal(hovered.id.toString()), Component.literal(state)),
-                    java.util.Optional.empty(), mouseX, mouseY);
+            graphics.setComponentTooltipForNextFrame(font,
+                    List.of(Component.literal(hovered.id.toString()), Component.literal(state)), mouseX, mouseY);
         }
         if (maxScroll > 0) {
             int trackX = gridX + gridWidth - 3;
@@ -165,8 +166,11 @@ final class EntityPickerScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (super.mouseClicked(mouseX, mouseY, button)) return true;
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (super.mouseClicked(event, doubleClick)) return true;
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (button != 0) return false;
         int gap = 3;
         int quickColumns = 3;
@@ -239,7 +243,7 @@ final class EntityPickerScreen extends Screen {
     @Override public void onClose() { cancel(); }
     @Override public boolean isPauseScreen() { return false; }
 
-    private static Item categoryIcon(EntityType<?> type, ResourceLocation id) {
+    private static Item categoryIcon(EntityType<?> type, Identifier id) {
         if (id.getPath().equals("player")) return Items.PLAYER_HEAD;
         if (id.getPath().equals("item")) return Items.DIAMOND;
         MobCategory category = type.getCategory();
@@ -256,6 +260,6 @@ final class EntityPickerScreen extends Screen {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    private record EntityEntry(ResourceLocation id, Component name, ItemStack icon) { }
+    private record EntityEntry(Identifier id, Component name, ItemStack icon) { }
     private record QuickOption(String selector, String label, Item item) { }
 }

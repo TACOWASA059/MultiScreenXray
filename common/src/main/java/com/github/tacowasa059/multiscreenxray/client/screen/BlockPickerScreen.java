@@ -6,9 +6,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -56,8 +57,8 @@ final class BlockPickerScreen extends Screen {
         super(Component.literal("Select blocks"));
         this.screenIndex = screenIndex;
         selected.addAll(ConfigManager.get().screen(screenIndex).blocks);
-        for (ResourceLocation id : BuiltInRegistries.BLOCK.keySet()) {
-            Block block = BuiltInRegistries.BLOCK.get(id);
+        for (Identifier id : BuiltInRegistries.BLOCK.keySet()) {
+            Block block = BuiltInRegistries.BLOCK.getValue(id);
             Item item = block.asItem();
             if (item != Items.AIR) allBlocks.add(new BlockEntry(id, block.getName(), new ItemStack(item)));
         }
@@ -157,8 +158,8 @@ final class BlockPickerScreen extends Screen {
         BlockEntry hovered = blockAt(mouseX, mouseY, filtered, columns, visibleRows);
         if (hovered != null) {
             String state = selected.contains(hovered.id.toString()) ? "Selected - click to remove" : "Click to select";
-            graphics.renderTooltip(font, List.of(Component.literal(hovered.id.toString()), Component.literal(state)),
-                    java.util.Optional.empty(), mouseX, mouseY);
+            graphics.setComponentTooltipForNextFrame(font,
+                    List.of(Component.literal(hovered.id.toString()), Component.literal(state)), mouseX, mouseY);
         }
         if (maxScroll > 0) {
             int trackX = gridX + gridWidth - 3;
@@ -171,8 +172,11 @@ final class BlockPickerScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (super.mouseClicked(mouseX, mouseY, button)) return true;
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (super.mouseClicked(event, doubleClick)) return true;
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (button != 0) return false;
         int gap = 3;
         int quickColumns = 4;
@@ -249,6 +253,6 @@ final class BlockPickerScreen extends Screen {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    private record BlockEntry(ResourceLocation id, Component name, ItemStack stack) { }
+    private record BlockEntry(Identifier id, Component name, ItemStack stack) { }
     private record TagOption(String selector, String label, Item item) { }
 }

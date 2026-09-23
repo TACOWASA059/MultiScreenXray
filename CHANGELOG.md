@@ -1,7 +1,9 @@
 ## 1.0.2
 
 - Added Minecraft 1.21.1 support for Fabric, Forge, and NeoForge.
+- Added Minecraft 1.21.11 support for Fabric, Forge, and NeoForge.
 - Kept block and entity library icons and labels sharp on blurred menu backgrounds.
+- Added support for NeoForge's validated GPU texture wrappers in extra X-ray windows.
 
 ## 1.0.1
 

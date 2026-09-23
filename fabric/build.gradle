@@ -14,7 +14,7 @@ dependencies {
 }
 
 loom {
-    def aw = project(":common").file("src/main/resources/${mod_id}.accesswidener")
+    def aw = project(':common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
     }
@@ -24,24 +24,59 @@ loom {
     runs {
         client {
             client()
-            setConfigName("Fabric Client")
+            setConfigName('Fabric Client')
             ideConfigGenerated(true)
-            runDir("runs/client")
+            runDir('runs/client')
         }
         verifyClient {
             client()
-            setConfigName("Fabric Verification Client")
+            setConfigName('Fabric Verification Client')
             ideConfigGenerated(false)
             runDir("verify-run/${minecraft_version}")
             programArg '--quickPlaySingleplayer'
             programArg 'New World'
             vmArg '-Dmultiscreenxray.capture=true'
         }
+        verifyGui {
+            client()
+            setConfigName('Fabric GUI Verification Client')
+            ideConfigGenerated(false)
+            runDir("verify-run/${minecraft_version}")
+            programArg '--quickPlaySingleplayer'
+            programArg 'New World'
+            environmentVariable 'MSXRAY_TEST_SCREEN', 'all'
+        }
         server {
             server()
-            setConfigName("Fabric Server")
+            setConfigName('Fabric Server')
             ideConfigGenerated(true)
-            runDir("runs/server")
+            runDir('runs/server')
+        }
+    }
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}
+loom.remapConfigurations.configureEach {
+    configurations.named(it.name) {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
         }
     }
 }

@@ -13,6 +13,9 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.InputWithModifiers;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -244,7 +247,6 @@ public final class XraySettingsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
         graphics.fill(panelX, 4, panelX + panelWidth, height - 3, PANEL);
         graphics.fill(panelX, 4, panelX + panelWidth, 6, ACCENT_DARK);
         graphics.drawString(font, "MULTISCREEN", panelX + 10, 11, ACCENT, false);
@@ -285,10 +287,10 @@ public final class XraySettingsScreen extends Screen {
             this.action = action;
         }
 
-        @Override public void onPress() { action.run(); }
+        @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             int color = !active ? 0x88404A56 : accent ? (isHoveredOrFocused() ? 0xFF5DE2FF : ACCENT_DARK)
                     : (isHoveredOrFocused() ? CARD_HOVER : CARD);
             graphics.fill(getX(), getY(), getX() + width, getY() + height, color);
@@ -318,10 +320,10 @@ public final class XraySettingsScreen extends Screen {
             this.action = action;
         }
 
-        @Override public void onPress() { action.run(); }
+        @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             int color = selected ? ACCENT_DARK : isHoveredOrFocused() ? CARD_HOVER : CARD;
             graphics.fill(getX(), getY(), getX() + width, getY() + height, color);
             int cx = getX() + width / 2;
@@ -348,10 +350,10 @@ public final class XraySettingsScreen extends Screen {
             this.action = action;
         }
 
-        @Override public void onPress() { action.run(); }
+        @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             graphics.fill(getX(), getY(), getX() + width, getY() + height,
                     selected ? 0xFF173A48 : isHoveredOrFocused() ? CARD_HOVER : CARD);
             if (selected) {
@@ -427,14 +429,14 @@ public final class XraySettingsScreen extends Screen {
         }
 
         @Override
-        public void onRelease(double mouseX, double mouseY) {
-            super.onRelease(mouseX, mouseY);
+        public void onRelease(MouseButtonEvent event) {
+            super.onRelease(event);
             commitIfChanged();
         }
 
         @Override
-        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            boolean handled = super.keyPressed(keyCode, scanCode, modifiers);
+        public boolean keyPressed(KeyEvent event) {
+            boolean handled = super.keyPressed(event);
             if (handled) commitIfChanged();
             return handled;
         }
