@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "multiscreenxray",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${description}",
+  "authors": ["${mod_author}"],
+  "contact": {
+    "sources": "https://github.com/TACOWASA059/MultiScreenXray",
+    "issues": "https://github.com/TACOWASA059/MultiScreenXray/issues"
+  },
+  "license": "${license}",
+  "icon": "assets/multiscreenxray/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.github.tacowasa059.multiscreenxray.fabric.MultiScreenXrayFabric"]
+  },
+  "mixins": ["multiscreenxray.mixins.json"],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
+  }
+}

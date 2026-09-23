@@ -1,0 +1,12 @@
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+repositories {
+    gradlePluginPortal()
+}
+
+dependencies {
+    implementation 'com.modrinth.minotaur:com.modrinth.minotaur.gradle.plugin:2.+'
+    implementation 'net.darkhax.curseforgegradle:net.darkhax.curseforgegradle.gradle.plugin:1.1.28'
+}

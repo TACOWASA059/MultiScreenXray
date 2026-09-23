@@ -1,0 +1,66 @@
+plugins {
+    id 'fabric-loom' version '1.9-SNAPSHOT' apply(false)
+    id 'net.neoforged.moddev.legacyforge' version '2.0.77' apply(false)
+}
+
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+
+def modrinthProjectId = providers.gradleProperty('modrinth_id').get()
+def modrinthRequest = { String method, String body ->
+    def token = System.getenv('MODRINTH_TOKEN')
+    if (!token) throw new GradleException('MODRINTH_TOKEN is not set.')
+    def builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.modrinth.com/v2/project/${modrinthProjectId}"))
+            .header('Authorization', token)
+            .header('User-Agent', 'TACOWASA059/MultiScreenXray')
+    if (method == 'PATCH') {
+        builder.header('Content-Type', 'application/json')
+                .method('PATCH', HttpRequest.BodyPublishers.ofString(body))
+    } else {
+        builder.GET()
+    }
+    def response = HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString())
+    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        throw new GradleException("Modrinth environment request failed with HTTP ${response.statusCode()}.")
+    }
+    response.body()
+}
+
+tasks.register('configureModrinthEnvironment') {
+    group = 'publishing'
+    doLast {
+        modrinthRequest('PATCH', JsonOutput.toJson([
+                client_side: 'required',
+                server_side: 'unsupported'
+        ]))
+    }
+}
+
+tasks.register('verifyModrinthEnvironment') {
+    group = 'publishing'
+    doLast {
+        def project = new JsonSlurper().parseText(modrinthRequest('GET', null))
+        if (project.client_side != 'required' || project.server_side != 'unsupported') {
+            throw new GradleException("Wrong Modrinth environment: client=${project.client_side}, server=${project.server_side}")
+        }
+        logger.lifecycle('MODRINTH_ENVIRONMENT=client:required,server:unsupported')
+    }
+}
+
+tasks.register('publishMods') {
+    group = 'publishing'
+    description = 'Publishes every loader to Modrinth and CurseForge.'
+}
+
+gradle.projectsEvaluated {
+    tasks.named('publishMods') {
+        subprojects.findAll { it.name in ['fabric', 'forge', 'neoforge'] }.each { loaderProject ->
+            dependsOn loaderProject.tasks.named('modrinth')
+            dependsOn loaderProject.tasks.named('publishCurseForge')
+        }
+    }
+}

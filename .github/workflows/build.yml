@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: ["1.20.1", "1.20.4", "1.21.1", "1.21.11", "26.2", "26.3"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read project versions
+        id: versions
+        shell: bash
+        run: |
+          echo "java=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "minecraft=$(sed -n 's/^minecraft_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ steps.versions.outputs.java }}
+          cache: gradle
+
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      - name: Upload loader jars
+        uses: actions/upload-artifact@v7
+        with:
+          name: multiscreenxray-${{ steps.versions.outputs.minecraft }}
+          if-no-files-found: error
+          path: |
+            fabric/build/libs/*.jar
+            forge/build/libs/*.jar
+            neoforge/build/libs/*.jar
+            !**/*-sources.jar
+            !**/*-javadoc.jar

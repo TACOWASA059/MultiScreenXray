@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.github.tacowasa059.multiscreenxray.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "multiscreenxray.refmap.json",
+  "client": [
+    "MinecraftMixin",
+    "LevelRendererMixin",
+    "ScreenEffectRendererMixin",
+    "EntityRenderDispatcherMixin",
+    "GameRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

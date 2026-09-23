@@ -1,0 +1,101 @@
+import net.darkhax.curseforgegradle.TaskPublishCurseForge
+
+plugins {
+    id 'com.modrinth.minotaur'
+    id 'net.darkhax.curseforgegradle'
+}
+
+def loader = project.name
+def loaderName = ['fabric': 'Fabric', 'forge': 'Forge', 'neoforge': 'NeoForge']
+        .getOrDefault(loader, loader.capitalize())
+def supportedVersions = supported_versions.split(',').collect { it.trim() }.findAll { it }
+def releaseNotes = "${mod_name} ${version} for Minecraft ${minecraft_version}." as String
+def changelogFile = rootProject.file('CHANGELOG.md')
+if (changelogFile.exists()) {
+    def section = changelogFile.text =~ /(?ms)^##\s+\Q${version}\E\s*\n(.*?)(?=^##\s|\z)/
+    releaseNotes = section.find() ? section.group(1).trim() : releaseNotes
+}
+
+def uploadTask = loader == 'fabric' ? 'remapJar' : 'reobfJar'
+def uploadJar = loader == 'fabric'
+        ? tasks.named('remapJar')
+        : file("${buildDir}/libs/${mod_id}-${loader}-${minecraft_version}-${version}.jar")
+def resolveUploadFile = {
+    loader == 'fabric'
+            ? tasks.named('remapJar').get().archiveFile.get().asFile
+            : uploadJar
+}
+
+modrinth {
+    projectId = modrinth_id
+    versionNumber = "${loaderName}${minecraft_version}-${version}"
+    versionName = "${mod_name} ${version} - ${loaderName} ${minecraft_version}"
+    versionType = release_type
+    uploadFile = uploadJar
+    gameVersions = supportedVersions
+    loaders = [loader]
+    changelog = releaseNotes
+    if (loader == 'fabric') {
+        dependencies {
+            required.project 'fabric-api'
+        }
+    }
+}
+
+tasks.named('modrinth') {
+    dependsOn uploadTask
+    dependsOn rootProject.tasks.named('configureModrinthEnvironment')
+    finalizedBy rootProject.tasks.named('verifyModrinthEnvironment')
+    doFirst {
+        if (!System.getenv('MODRINTH_TOKEN')) {
+            throw new GradleException('MODRINTH_TOKEN is not set.')
+        }
+    }
+}
+
+tasks.register('publishCurseForge', TaskPublishCurseForge) {
+    group = 'publishing'
+    description = "Uploads the ${loader} release JAR to CurseForge."
+    dependsOn uploadTask
+    apiToken = System.getenv('CURSEFORGE_TOKEN')
+    doFirst {
+        if (!System.getenv('CURSEFORGE_TOKEN')) {
+            throw new GradleException('CURSEFORGE_TOKEN is not set.')
+        }
+    }
+    def mainFile = upload(curseforge_id, uploadJar)
+    mainFile.releaseType = release_type
+    mainFile.changelog = releaseNotes
+    mainFile.changelogType = 'markdown'
+    mainFile.addModLoader(loaderName)
+    supportedVersions.each { mainFile.addGameVersion(it) }
+    curseforge_environments.split(',').collect { it.trim() }.findAll { it }.each {
+        mainFile.addGameVersion(it)
+    }
+    if (loader == 'fabric') {
+        mainFile.addRequirement('fabric-api')
+    }
+}
+
+tasks.register('printPublishArtifact') {
+    group = 'publishing'
+    dependsOn uploadTask
+    doLast {
+        def artifact = resolveUploadFile()
+        logger.lifecycle("PUBLISH_FILE=${artifact.absolutePath}")
+        logger.lifecycle("PUBLISH_NAME=${artifact.name}")
+        logger.lifecycle("PUBLISH_SIZE=${artifact.length()}")
+    }
+}
+
+tasks.register('publishInfo') {
+    group = 'publishing'
+    doLast {
+        def artifact = resolveUploadFile()
+        logger.lifecycle("PUBLISH_LOADER=${loaderName}")
+        logger.lifecycle("PUBLISH_FILE=${artifact.absolutePath}")
+        logger.lifecycle("PUBLISH_MINECRAFT=${supportedVersions.join(',')}")
+        logger.lifecycle("PUBLISH_VERSION=${loaderName}${minecraft_version}-${version}")
+        logger.lifecycle('PUBLISH_ENVIRONMENT=client:required,server:unsupported')
+    }
+}
