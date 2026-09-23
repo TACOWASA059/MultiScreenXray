@@ -266,7 +266,8 @@ final class ExtraWindow implements AutoCloseable {
 
     private void captureForTest(int width, int height) {
         long now = System.nanoTime();
-        if (debugCaptured || !"1".equals(System.getenv("MSXRAY_CAPTURE"))
+        if (debugCaptured || !("1".equals(System.getenv("MSXRAY_CAPTURE"))
+                || Boolean.getBoolean("multiscreenxray.capture"))
                 || now - openedAt <= 10_000_000_000L) return;
         debugCaptured = true;
         ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);

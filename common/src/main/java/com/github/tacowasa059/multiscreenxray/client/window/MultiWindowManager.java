@@ -29,6 +29,7 @@ public final class MultiWindowManager {
     private static long configuredAt;
     private static boolean testScreenOpened;
     private static boolean testScreenCaptured;
+    private static boolean testWorldCaptured;
     private static int visualTestStage;
 
     private MultiWindowManager() { }
@@ -88,6 +89,7 @@ public final class MultiWindowManager {
         } else if (pauseMenuOpen) {
             for (ExtraWindow window : WINDOWS) window.idle();
         }
+        captureWorldForTest(minecraft, rendered);
         runVisualTestCapture(minecraft, rendered);
     }
 
@@ -180,6 +182,15 @@ public final class MultiWindowManager {
             testScreenCaptured = true;
             captureVisualScreen(minecraft, mode.toLowerCase());
         }
+    }
+
+    private static void captureWorldForTest(Minecraft minecraft, boolean rendered) {
+        if (testWorldCaptured || !rendered || minecraft.screen != null
+                || !("1".equals(System.getenv("MSXRAY_CAPTURE"))
+                    || Boolean.getBoolean("multiscreenxray.capture")) || configuredAt == 0L
+                || System.nanoTime() - configuredAt <= 10_000_000_000L) return;
+        testWorldCaptured = true;
+        captureVisualScreen(minecraft, "world");
     }
 
     private static void captureVisualScreen(Minecraft minecraft, String name) {

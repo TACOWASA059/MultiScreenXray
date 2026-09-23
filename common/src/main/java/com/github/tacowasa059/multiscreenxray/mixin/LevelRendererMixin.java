@@ -47,7 +47,7 @@ public abstract class LevelRendererMixin {
         if (XrayOverlayPass.active()) callback.cancel();
     }
 
-    @Inject(method = "renderChunkLayer", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true)
     private void multiscreenxray$skipTerrain(RenderType renderType, PoseStack poseStack,
             double camX, double camY, double camZ, Matrix4f projectionMatrix, CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
@@ -65,7 +65,7 @@ public abstract class LevelRendererMixin {
         if (XrayOverlayPass.active()) callback.cancel();
     }
 
-    @Inject(method = "compileChunks", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "compileSections", at = @At("HEAD"), cancellable = true)
     private void multiscreenxray$reuseChunks(Camera camera, CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
     }

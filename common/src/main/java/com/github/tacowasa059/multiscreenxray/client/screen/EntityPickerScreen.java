@@ -86,7 +86,7 @@ final class EntityPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
         int panelX = gridX - 8;
         graphics.fill(panelX, 4, gridX + gridWidth + 8, height - 3, PANEL);
         graphics.fill(panelX, 4, gridX + gridWidth + 8, 6, 0xFF13677D);
@@ -189,8 +189,8 @@ final class EntityPickerScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-        scrollRows -= (int) Math.signum(amount);
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        scrollRows -= (int) Math.signum(deltaY);
         return true;
     }
 

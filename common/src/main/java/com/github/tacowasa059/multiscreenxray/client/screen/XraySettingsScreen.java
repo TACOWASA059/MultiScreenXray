@@ -244,7 +244,7 @@ public final class XraySettingsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
         graphics.fill(panelX, 4, panelX + panelWidth, height - 3, PANEL);
         graphics.fill(panelX, 4, panelX + panelWidth, 6, ACCENT_DARK);
         graphics.drawString(font, "MULTISCREEN", panelX + 10, 11, ACCENT, false);

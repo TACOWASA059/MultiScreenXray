@@ -71,6 +71,8 @@ Multiple selectors are separated with commas. Settings are stored in `config/mul
 
 Multiplayer support is client side and does not require installation on the server. Server anti X-ray systems can limit which hidden blocks the client receives. Follow the rules of the server you join.
 
+Maintainers can follow the [version porting workflow](docs/VERSION_PORTING.md) for later branches and releases.
+
 ## License
 
 [MIT](LICENSE)
