@@ -1,6 +1,6 @@
 plugins {
-    id 'fabric-loom' version '1.13-SNAPSHOT' apply false
-    id 'net.neoforged.moddev' version '2.0.123' apply false
+    id 'net.fabricmc.fabric-loom' version '1.16.3' apply false
+    id 'net.neoforged.moddev' version '2.0.147' apply false
 }
 
 import groovy.json.JsonOutput
@@ -58,7 +58,7 @@ tasks.register('publishMods') {
 
 gradle.projectsEvaluated {
     tasks.named('publishMods') {
-        subprojects.findAll { it.name in ['fabric', 'forge', 'neoforge'] }.each { loaderProject ->
+        subprojects.findAll { it.name in ['fabric', 'neoforge'] }.each { loaderProject ->
             dependsOn loaderProject.tasks.named('modrinth')
             dependsOn loaderProject.tasks.named('publishCurseForge')
         }

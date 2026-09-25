@@ -1,13 +1,26 @@
 package com.github.tacowasa059.multiscreenxray.client.render;
 
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.BlockModelPart;
-import net.minecraft.client.renderer.block.model.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.BindGroupLayouts;
+import net.minecraft.client.renderer.ProjectionMatrixBuffer;
 import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.BlockPos;
@@ -24,15 +37,12 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 import org.joml.Vector3fc;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
-import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
 
-import java.nio.FloatBuffer;
+import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,27 +50,29 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
 
 /** Draws client-known ore blocks through terrain in the player's camera. */
 public final class XrayWorldRenderer implements AutoCloseable {
+    private static final RenderPipeline COLOR_LINES = colorPipeline("xray_lines", PrimitiveTopology.DEBUG_LINES);
+    private static final RenderPipeline COLOR_TRIANGLES = colorPipeline("xray_triangles", PrimitiveTopology.TRIANGLES);
+    private static final RenderPipeline ORE_PIPELINE = RenderPipeline.builder()
+            .withLocation(Identifier.fromNamespaceAndPath("multiscreenxray", "pipeline/xray_ores"))
+            .withVertexShader("core/position_tex_color")
+            .withFragmentShader("core/position_tex_color")
+            .withBindGroupLayout(BindGroupLayouts.GLOBALS)
+            .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+            .withCull(true)
+            .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+            .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+            .withDepthStencilState(DepthStencilState.DEFAULT)
+            .build();
     private static final int OUTLINE_RADIUS = 32;
     private static final int ORE_BORDER_RADIUS = 32;
     private static final int MAX_ORES = 15000;
     private static final long REFRESH_NANOS = 30_000_000_000L;
-    private static final String VERTEX_SHADER = "#version 150\n"
-            + "in vec3 aPosition; in vec4 aColor; uniform mat4 uMatrix; out vec4 vColor;\n"
-            + "void main() { vColor = aColor; gl_Position = uMatrix * vec4(aPosition, 1.0); }\n";
-    private static final String FRAGMENT_SHADER = "#version 150\n"
-            + "in vec4 vColor; out vec4 fragColor;\n"
-            + "void main() { fragColor = vColor; }\n";
-    private static final String ORE_VERTEX_SHADER = "#version 150\n"
-            + "in vec3 aPosition; in vec2 aTexCoord; uniform mat4 uMatrix; out vec2 vTexCoord;\n"
-            + "void main() { vTexCoord = aTexCoord; gl_Position = uMatrix * vec4(aPosition, 1.0); }\n";
-    private static final String ORE_FRAGMENT_SHADER = "#version 150\n"
-            + "in vec2 vTexCoord; uniform sampler2D uAtlas; uniform float uBrightness; out vec4 fragColor;\n"
-            + "void main() { vec4 texel = texture(uAtlas, vTexCoord);"
-            + " if (texel.a < 0.05) discard;"
-            + " fragColor = vec4(min(texel.rgb * uBrightness, vec3(1.0)), texel.a); }\n";
     private static final int[][] EDGES = {
             {0, 1}, {1, 3}, {3, 2}, {2, 0},
             {4, 5}, {5, 7}, {7, 6}, {6, 4},
@@ -71,20 +83,11 @@ public final class XrayWorldRenderer implements AutoCloseable {
             0x00F, 0x0F0, 0x311, 0xC44, 0x588, 0xA22
     };
 
-    private final int program;
-    private final int matrixUniform;
-    private final int oreProgram;
-    private final int oreMatrixUniform;
-    private final int oreBrightnessUniform;
-    private final int vertexArray;
-    private final int vertexBuffer;
-    private final int outlineArray;
-    private final int outlineBuffer;
-    private final int oreBorderArray;
-    private final int oreBorderBuffer;
-    private final int fluidArray;
-    private final int fluidBuffer;
-    private final FloatBuffer matrixBuffer = BufferUtils.createFloatBuffer(16);
+    private GpuBuffer vertexBuffer;
+    private GpuBuffer outlineBuffer;
+    private GpuBuffer oreBorderBuffer;
+    private GpuBuffer fluidBuffer;
+    private final ProjectionMatrixBuffer projection = new ProjectionMatrixBuffer("MultiScreen X-ray");
     private final ArrayDeque<ChunkPosition> pending = new ArrayDeque<>();
     private final List<OrePosition> ores = new ArrayList<>();
     private final Map<Block, Integer> classifications = new IdentityHashMap<>();
@@ -117,51 +120,6 @@ public final class XrayWorldRenderer implements AutoCloseable {
         this.matcher = new ProfileMatcher(this.profile);
         this.chunkRadius = chunkRadius;
         this.verticalRadius = verticalRadius;
-        int vertex = compileShader(GL20.GL_VERTEX_SHADER, VERTEX_SHADER);
-        int fragment = compileShader(GL20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
-        program = GL20.glCreateProgram();
-        GL20.glAttachShader(program, vertex);
-        GL20.glAttachShader(program, fragment);
-        GL20.glBindAttribLocation(program, 0, "aPosition");
-        GL20.glBindAttribLocation(program, 1, "aColor");
-        GL20.glLinkProgram(program);
-        GL20.glDeleteShader(vertex);
-        GL20.glDeleteShader(fragment);
-        if (GL20.glGetProgrami(program, GL20.GL_LINK_STATUS) == GL11.GL_FALSE) {
-            throw new IllegalStateException("X-ray shader link failed: " + GL20.glGetProgramInfoLog(program));
-        }
-        matrixUniform = GL20.glGetUniformLocation(program, "uMatrix");
-        int oreVertex = compileShader(GL20.GL_VERTEX_SHADER, ORE_VERTEX_SHADER);
-        int oreFragment = compileShader(GL20.GL_FRAGMENT_SHADER, ORE_FRAGMENT_SHADER);
-        oreProgram = GL20.glCreateProgram();
-        GL20.glAttachShader(oreProgram, oreVertex);
-        GL20.glAttachShader(oreProgram, oreFragment);
-        GL20.glBindAttribLocation(oreProgram, 0, "aPosition");
-        GL20.glBindAttribLocation(oreProgram, 1, "aTexCoord");
-        GL20.glLinkProgram(oreProgram);
-        GL20.glDeleteShader(oreVertex);
-        GL20.glDeleteShader(oreFragment);
-        if (GL20.glGetProgrami(oreProgram, GL20.GL_LINK_STATUS) == GL11.GL_FALSE) {
-            throw new IllegalStateException("Ore shader link failed: " + GL20.glGetProgramInfoLog(oreProgram));
-        }
-        oreMatrixUniform = GL20.glGetUniformLocation(oreProgram, "uMatrix");
-        oreBrightnessUniform = GL20.glGetUniformLocation(oreProgram, "uBrightness");
-        GL20.glUseProgram(oreProgram);
-        GL20.glUniform1i(GL20.glGetUniformLocation(oreProgram, "uAtlas"), 0);
-        GL20.glUniform1f(oreBrightnessUniform, this.profile.brightness);
-        GL20.glUseProgram(0);
-        vertexArray = GL30.glGenVertexArrays();
-        vertexBuffer = GL15.glGenBuffers();
-        configureOreArray(vertexArray, vertexBuffer);
-        outlineArray = GL30.glGenVertexArrays();
-        outlineBuffer = GL15.glGenBuffers();
-        configureArray(outlineArray, outlineBuffer);
-        oreBorderArray = GL30.glGenVertexArrays();
-        oreBorderBuffer = GL15.glGenBuffers();
-        configureArray(oreBorderArray, oreBorderBuffer);
-        fluidArray = GL30.glGenVertexArrays();
-        fluidBuffer = GL15.glGenBuffers();
-        configureArray(fluidArray, fluidBuffer);
     }
 
     public int oreCount() {
@@ -176,9 +134,9 @@ public final class XrayWorldRenderer implements AutoCloseable {
         return !snapshotReady && !pending.isEmpty();
     }
 
-    public void render(Minecraft minecraft, int width, int height, float fieldOfView) {
+    public void render(Minecraft minecraft, RenderTarget target, float fieldOfView) {
         this.minecraft = minecraft;
-        Camera camera = minecraft.gameRenderer.getMainCamera();
+        Camera camera = minecraft.gameRenderer.mainCamera();
         if (minecraft.level == null || !camera.isInitialized()) {
             return;
         }
@@ -195,65 +153,53 @@ public final class XrayWorldRenderer implements AutoCloseable {
         scanBatch();
         int blockX = (int) Math.floor(position.x);
         int blockZ = (int) Math.floor(position.z);
-        if (Math.abs(blockX - outlineX) >= 8 || Math.abs(blockY - outlineY) >= 8
-                || Math.abs(blockZ - outlineZ) >= 8) {
+        if (snapshotReady && (Math.abs(blockX - outlineX) >= 8 || Math.abs(blockY - outlineY) >= 8
+                || Math.abs(blockZ - outlineZ) >= 8)) {
             rebuildOutlines(blockX, blockY, blockZ);
         }
 
-        GL11.glViewport(0, 0, width, height);
-        GL11.glDisable(GL11.GL_DEPTH_TEST);
-        GL11.glDepthMask(true);
-        GL11.glDisable(GL11.GL_CULL_FACE);
-        GL11.glClearColor(0.075f, 0.09f, 0.13f, 1.0f);
-        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-        GL20.glUseProgram(program);
-        Matrix4f matrix = new Matrix4f()
-                .perspective((float) Math.toRadians(fieldOfView),
-                        (float) width / height, 0.05f, 256f)
+        if (target.getColorTextureView() == null || target.getDepthTextureView() == null) return;
+        RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
+                target.getColorTexture(), new Vector4f(0.075f, 0.09f, 0.13f, 1.0f),
+                target.getDepthTexture(), 0.0);
+        Matrix4f projectionMatrix = new Matrix4f()
+                .perspective((float) Math.toRadians(fieldOfView), (float) target.width / target.height,
+                        256f, 0.05f, RenderSystem.getDevice().getDeviceInfo().isZZeroToOne());
+        Matrix4f viewMatrix = new Matrix4f()
                 .rotateX((float) Math.toRadians(camera.xRot()))
                 .rotateY((float) Math.toRadians(camera.yRot() + 180f))
                 .translate(-(float) (position.x - originX),
                         -(float) (position.y - originY),
                         -(float) (position.z - originZ));
-        matrixBuffer.clear();
-        matrix.get(matrixBuffer);
-        GL20.glUniformMatrix4fv(matrixUniform, false, matrixBuffer);
-        GL11.glEnable(GL11.GL_BLEND);
-        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        if (profile.showOutlines) {
-            GL30.glBindVertexArray(outlineArray);
-            GL11.glDrawArrays(GL11.GL_LINES, 0, outlineVertexCount);
+        GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(viewMatrix);
+        GpuBufferSlice oreTransform = RenderSystem.getDynamicUniforms().writeTransform(
+                viewMatrix, new Vector4f(profile.brightness, profile.brightness, profile.brightness, 1.0f));
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> "MultiScreen X-ray world", target.getColorTextureView(), Optional.empty(),
+                target.getDepthTextureView(), OptionalDouble.empty())) {
+            if (profile.showOutlines && outlineBuffer != null && outlineVertexCount > 0) {
+                bindCommon(pass, COLOR_LINES, transform, projectionMatrix);
+                pass.setVertexBuffer(0, outlineBuffer.slice());
+                pass.draw(outlineVertexCount, 1, 0, 0);
+            }
+            if (vertexBuffer != null && vertexCount > 0) {
+                bindCommon(pass, ORE_PIPELINE, oreTransform, projectionMatrix);
+                var atlas = minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS);
+                pass.bindTexture("Sampler0", atlas.getTextureView(), atlas.getSampler());
+                pass.setVertexBuffer(0, vertexBuffer.slice());
+                pass.draw(vertexCount, 1, 0, 0);
+            }
+            if (oreBorderBuffer != null && oreBorderVertexCount > 0) {
+                bindCommon(pass, COLOR_LINES, transform, projectionMatrix);
+                pass.setVertexBuffer(0, oreBorderBuffer.slice());
+                pass.draw(oreBorderVertexCount, 1, 0, 0);
+            }
+            if (profile.showFluids && fluidBuffer != null && fluidVertexCount > 0) {
+                bindCommon(pass, COLOR_TRIANGLES, transform, projectionMatrix);
+                pass.setVertexBuffer(0, fluidBuffer.slice());
+                pass.draw(fluidVertexCount, 1, 0, 0);
+            }
         }
-        GL11.glDisable(GL11.GL_BLEND);
-        GL11.glEnable(GL11.GL_DEPTH_TEST);
-        GL11.glDepthFunc(GL11.GL_LEQUAL);
-        GL20.glUseProgram(oreProgram);
-        matrixBuffer.rewind();
-        GL20.glUniformMatrix4fv(oreMatrixUniform, false, matrixBuffer);
-        GL20.glUniform1f(oreBrightnessUniform, profile.brightness);
-        GL13.glActiveTexture(GL13.GL_TEXTURE0);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                GlTextureAccess.id(minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)
-                        .getTexture()));
-        GL30.glBindVertexArray(vertexArray);
-        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, vertexCount);
-        GL30.glBindVertexArray(0);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-        GL20.glUseProgram(program);
-        matrixBuffer.rewind();
-        GL20.glUniformMatrix4fv(matrixUniform, false, matrixBuffer);
-        GL11.glDisable(GL11.GL_DEPTH_TEST);
-        GL11.glEnable(GL11.GL_BLEND);
-        GL30.glBindVertexArray(oreBorderArray);
-        GL11.glDrawArrays(GL11.GL_LINES, 0, oreBorderVertexCount);
-        GL11.glDisable(GL11.GL_DEPTH_TEST);
-        if (profile.showFluids) {
-            GL30.glBindVertexArray(fluidArray);
-            GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, fluidVertexCount);
-        }
-        GL30.glBindVertexArray(0);
-        GL11.glDisable(GL11.GL_BLEND);
-        GL20.glUseProgram(0);
     }
 
     private void beginScan(ClientLevel nextLevel, Vec3 position, int chunkX, int chunkZ, int blockY) {
@@ -302,8 +248,7 @@ public final class XrayWorldRenderer implements AutoCloseable {
         if (ores.size() >= MAX_ORES) {
             pending.clear();
         }
-        if (scannedSinceUpload > 0 && (pending.isEmpty()
-                || !snapshotReady && scannedSinceUpload >= 12 && !ores.isEmpty())) {
+        if (scannedSinceUpload > 0 && pending.isEmpty()) {
             upload();
             scannedSinceUpload = 0;
             if (pending.isEmpty()) {
@@ -329,8 +274,8 @@ public final class XrayWorldRenderer implements AutoCloseable {
                     for (int x = 0; x < 16 && ores.size() < MAX_ORES; x++) {
                         BlockState state = section.getBlockState(x, y, z);
                         if (isOre(state)) {
-                            ores.add(new OrePosition((chunk.getPos().x << 4) + x,
-                                    sectionBaseY + y, (chunk.getPos().z << 4) + z, state));
+                            ores.add(new OrePosition((chunk.getPos().x() << 4) + x,
+                                    sectionBaseY + y, (chunk.getPos().z() << 4) + z, state));
                         }
                     }
                 }
@@ -373,17 +318,10 @@ public final class XrayWorldRenderer implements AutoCloseable {
         }
         vertexCount = vertices.size / 5;
         visibleOreCount = ores.size();
-        FloatBuffer data = BufferUtils.createFloatBuffer(vertices.size);
-        data.put(vertices.values, 0, vertices.size).flip();
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vertexBuffer);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, data, GL15.GL_DYNAMIC_DRAW);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+        vertexBuffer = buildOreBuffer(vertices, vertexBuffer);
         oreBorderVertexCount = borders.size / 7;
-        FloatBuffer borderData = BufferUtils.createFloatBuffer(borders.size);
-        borderData.put(borders.values, 0, borders.size).flip();
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, oreBorderBuffer);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, borderData, GL15.GL_DYNAMIC_DRAW);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+        oreBorderBuffer = buildColorBuffer(borders, oreBorderBuffer,
+                "MultiScreen X-ray ore borders");
     }
 
     private void appendOreBorder(FloatCollector vertices, OrePosition ore) {
@@ -413,11 +351,13 @@ public final class XrayWorldRenderer implements AutoCloseable {
 
     private void appendModel(FloatCollector vertices, OrePosition ore) {
         BlockPos position = new BlockPos(ore.x(), ore.y(), ore.z());
-        BlockStateModel model = minecraft.getModelManager().getBlockModelShaper().getBlockModel(ore.state());
+        BlockStateModel model = minecraft.getModelManager().getBlockStateModelSet().get(ore.state());
         RandomSource random = RandomSource.create();
         long seed = ore.state().getSeed(position);
         random.setSeed(seed);
-        for (BlockModelPart part : model.collectParts(random)) {
+        List<BlockStateModelPart> parts = new ArrayList<>();
+        model.collectParts(random, parts);
+        for (BlockStateModelPart part : parts) {
             appendQuads(vertices, part.getQuads(null), ore);
             for (Direction direction : Direction.values()) {
                 appendQuads(vertices, part.getQuads(direction), ore);
@@ -484,17 +424,11 @@ public final class XrayWorldRenderer implements AutoCloseable {
             }
         }
         outlineVertexCount = vertices.size / 7;
-        FloatBuffer data = BufferUtils.createFloatBuffer(vertices.size);
-        data.put(vertices.values, 0, vertices.size).flip();
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, outlineBuffer);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, data, GL15.GL_DYNAMIC_DRAW);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+        outlineBuffer = buildColorBuffer(vertices, outlineBuffer,
+                "MultiScreen X-ray outlines");
         fluidVertexCount = fluidVertices.size / 7;
-        FloatBuffer fluids = BufferUtils.createFloatBuffer(fluidVertices.size);
-        fluids.put(fluidVertices.values, 0, fluidVertices.size).flip();
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, fluidBuffer);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, fluids, GL15.GL_DYNAMIC_DRAW);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+        fluidBuffer = buildColorBuffer(fluidVertices, fluidBuffer,
+                "MultiScreen X-ray fluids");
     }
 
     private void appendFluid(FloatCollector vertices, BlockPos position, BlockPos.MutableBlockPos neighbor,
@@ -602,52 +536,76 @@ public final class XrayWorldRenderer implements AutoCloseable {
         vertices.add(profile.outlineAlpha);
     }
 
-    private static void configureArray(int array, int buffer) {
-        GL30.glBindVertexArray(array);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, buffer);
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 7 * Float.BYTES, 0L);
-        GL20.glEnableVertexAttribArray(1);
-        GL20.glVertexAttribPointer(1, 4, GL11.GL_FLOAT, false, 7 * Float.BYTES, 3L * Float.BYTES);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-        GL30.glBindVertexArray(0);
+    private static RenderPipeline colorPipeline(String name, PrimitiveTopology topology) {
+        return RenderPipeline.builder()
+                .withLocation(Identifier.fromNamespaceAndPath("multiscreenxray", "pipeline/" + name))
+                .withVertexShader("core/position_color")
+                .withFragmentShader("core/position_color")
+                .withBindGroupLayout(BindGroupLayouts.GLOBALS)
+                .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                .withCull(false)
+                .withVertexBinding(0, DefaultVertexFormat.POSITION_COLOR)
+                .withPrimitiveTopology(topology)
+                .build();
     }
 
-    private static void configureOreArray(int array, int buffer) {
-        GL30.glBindVertexArray(array);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, buffer);
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 5 * Float.BYTES, 0L);
-        GL20.glEnableVertexAttribArray(1);
-        GL20.glVertexAttribPointer(1, 2, GL11.GL_FLOAT, false, 5 * Float.BYTES, 3L * Float.BYTES);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-        GL30.glBindVertexArray(0);
+    private void bindCommon(RenderPass pass, RenderPipeline pipeline, GpuBufferSlice transform,
+                            Matrix4f projectionMatrix) {
+        pass.setPipeline(pipeline);
+        RenderSystem.bindDefaultUniforms(pass);
+        pass.setUniform("Projection", projection.getBuffer(projectionMatrix));
+        pass.setUniform("DynamicTransforms", transform);
+    }
+
+    private static GpuBuffer buildOreBuffer(FloatCollector data, GpuBuffer previous) {
+        closeBuffer(previous);
+        if (data.size == 0) return null;
+        int count = data.size / 5;
+        ByteBuffer bytes = BufferUtils.createByteBuffer(
+                count * DefaultVertexFormat.POSITION_TEX_COLOR.getVertexSize());
+        for (int i = 0; i < data.size; i += 5) {
+            bytes.putFloat(data.values[i]).putFloat(data.values[i + 1]).putFloat(data.values[i + 2]);
+            bytes.putFloat(data.values[i + 3]).putFloat(data.values[i + 4]);
+            bytes.putInt(-1);
+        }
+        bytes.flip();
+        return RenderSystem.getDevice().createBuffer(() -> "MultiScreen X-ray ores",
+                GpuBuffer.USAGE_VERTEX, bytes);
+    }
+
+    private static GpuBuffer buildColorBuffer(FloatCollector data, GpuBuffer previous, String label) {
+        closeBuffer(previous);
+        if (data.size == 0) return null;
+        int count = data.size / 7;
+        ByteBuffer bytes = BufferUtils.createByteBuffer(
+                count * DefaultVertexFormat.POSITION_COLOR.getVertexSize());
+        for (int i = 0; i < data.size; i += 7) {
+            bytes.putFloat(data.values[i]).putFloat(data.values[i + 1]).putFloat(data.values[i + 2]);
+            bytes.put(colorByte(data.values[i + 3]));
+            bytes.put(colorByte(data.values[i + 4]));
+            bytes.put(colorByte(data.values[i + 5]));
+            bytes.put(colorByte(data.values[i + 6]));
+        }
+        bytes.flip();
+        return RenderSystem.getDevice().createBuffer(() -> label, GpuBuffer.USAGE_VERTEX, bytes);
+    }
+
+    private static byte colorByte(float value) {
+        return (byte) Math.max(0, Math.min(255, Math.round(value * 255.0f)));
+    }
+
+    private static void closeBuffer(GpuBuffer buffer) {
+        if (buffer != null) buffer.close();
     }
 
     @Override
     public void close() {
-        GL15.glDeleteBuffers(vertexBuffer);
-        GL15.glDeleteBuffers(outlineBuffer);
-        GL15.glDeleteBuffers(oreBorderBuffer);
-        GL15.glDeleteBuffers(fluidBuffer);
-        GL30.glDeleteVertexArrays(vertexArray);
-        GL30.glDeleteVertexArrays(outlineArray);
-        GL30.glDeleteVertexArrays(oreBorderArray);
-        GL30.glDeleteVertexArrays(fluidArray);
-        GL20.glDeleteProgram(program);
-        GL20.glDeleteProgram(oreProgram);
-    }
-
-    private static int compileShader(int type, String source) {
-        int shader = GL20.glCreateShader(type);
-        GL20.glShaderSource(shader, source);
-        GL20.glCompileShader(shader);
-        if (GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) == GL11.GL_FALSE) {
-            String log = GL20.glGetShaderInfoLog(shader);
-            GL20.glDeleteShader(shader);
-            throw new IllegalStateException("X-ray shader compilation failed: " + log);
-        }
-        return shader;
+        closeBuffer(vertexBuffer);
+        closeBuffer(outlineBuffer);
+        closeBuffer(oreBorderBuffer);
+        closeBuffer(fluidBuffer);
+        projection.close();
     }
 
     private record ChunkPosition(int x, int z, int distanceSquared) { }

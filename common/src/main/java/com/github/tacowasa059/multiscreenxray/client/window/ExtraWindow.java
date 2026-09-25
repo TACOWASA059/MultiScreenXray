@@ -1,47 +1,53 @@
 package com.github.tacowasa059.multiscreenxray.client.window;
 
+import com.github.tacowasa059.multiscreenxray.client.render.GlTextureAccess;
 import com.github.tacowasa059.multiscreenxray.client.render.OverlayBlitter;
 import com.github.tacowasa059.multiscreenxray.client.render.XrayOverlayRenderer;
 import com.github.tacowasa059.multiscreenxray.client.render.XrayWorldRenderer;
 import com.github.tacowasa059.multiscreenxray.config.ConfigManager;
 import com.github.tacowasa059.multiscreenxray.config.XrayConfig;
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.systems.GpuSurface;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.SurfaceException;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
-import org.lwjgl.BufferUtils;
-import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.Callbacks;
+import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWWindowFocusCallbackI;
 import org.lwjgl.glfw.GLFWWindowPosCallbackI;
 import org.lwjgl.glfw.GLFWWindowSizeCallbackI;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GLCapabilities;
 import org.slf4j.Logger;
-
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /** One GLFW window with its own saved profile and renderer. */
 final class ExtraWindow implements AutoCloseable {
     private static final Logger LOGGER = LogUtils.getLogger();
+
     private final Minecraft minecraft;
     private final int number;
+    private final boolean openGl;
     private long handle;
     private GLCapabilities capabilities;
+    private int glBlitFramebuffer;
+    private GpuSurface surface;
+    private RenderTarget target;
+    private int configuredWidth;
+    private int configuredHeight;
+    private boolean surfaceInvalid = true;
     private XrayWorldRenderer xrayRenderer;
     private XrayOverlayRenderer overlayRenderer;
     private OverlayBlitter overlayBlitter;
     private XrayProfile profile;
     private long profileRevision = Long.MIN_VALUE;
     private boolean rendererInvalid = true;
-    private final long openedAt = System.nanoTime();
     private long lastTitleUpdate;
-    private boolean debugCaptured;
     private boolean geometryDirty;
     private long geometryChangedAt;
     private GLFWWindowFocusCallbackI focusCallback;
@@ -53,9 +59,11 @@ final class ExtraWindow implements AutoCloseable {
     ExtraWindow(Minecraft minecraft, int number) {
         this.minecraft = minecraft;
         this.number = number;
+        this.openGl = RenderSystem.getDevice().getDeviceInfo().backendName().equalsIgnoreCase("OpenGL");
         refreshProfile();
         createWindow();
-        LOGGER.info("Opened MultiScreen X-ray window {} with GLFW handle {}", number, handle);
+        LOGGER.info("Opened MultiScreen X-ray window {} with GLFW handle {} on {}",
+                number, handle, RenderSystem.getDevice().getDeviceInfo().backendName());
     }
 
     int number() { return number; }
@@ -94,30 +102,78 @@ final class ExtraWindow implements AutoCloseable {
     void render(XrayOverlayRenderer.Frame overlayFrame) {
         if (handle == 0L) return;
         saveGeometryIfDue();
+        refreshProfile();
+        if (rendererInvalid) {
+            if (xrayRenderer != null) xrayRenderer.close();
+            XrayConfig config = ConfigManager.get();
+            xrayRenderer = new XrayWorldRenderer(profile, config.scanRadiusChunks, config.verticalRadius);
+            rendererInvalid = false;
+        }
+
+        int[] width = new int[1];
+        int[] height = new int[1];
+        GLFW.glfwGetFramebufferSize(handle, width, height);
+        if (width[0] <= 0 || height[0] <= 0) return;
+        ensureTarget(width[0], height[0]);
+        xrayRenderer.render(minecraft, target, overlayFrame.worldFov());
+        overlayBlitter.draw(target, overlayFrame.textureView());
+        updateTitle();
+
+        if (openGl) {
+            presentOpenGl(width[0], height[0]);
+        } else {
+            presentSurface(width[0], height[0]);
+        }
+    }
+
+    private void ensureTarget(int width, int height) {
+        if (target == null) {
+            target = new TextureTarget("MultiScreen X-ray window " + number,
+                    width, height, true, GpuFormat.RGBA8_UNORM);
+        } else if (target.width != width || target.height != height) {
+            target.resize(width, height);
+        }
+    }
+
+    private void presentOpenGl(int width, int height) {
         long mainHandle = minecraft.getWindow().handle();
         GLCapabilities mainCapabilities = GL.getCapabilities();
         try {
             GLFW.glfwMakeContextCurrent(handle);
             GL.setCapabilities(capabilities);
-            if (rendererInvalid) {
-                if (xrayRenderer != null) xrayRenderer.close();
-                XrayConfig config = ConfigManager.get();
-                xrayRenderer = new XrayWorldRenderer(profile, config.scanRadiusChunks, config.verticalRadius);
-                rendererInvalid = false;
-            }
-            int[] width = new int[1];
-            int[] height = new int[1];
-            GLFW.glfwGetFramebufferSize(handle, width, height);
-            if (width[0] > 0 && height[0] > 0) {
-                xrayRenderer.render(minecraft, width[0], height[0], overlayFrame.worldFov());
-                overlayBlitter.draw(overlayFrame.textureId());
-                updateTitle();
-                captureForTest(width[0], height[0]);
-                GLFW.glfwSwapBuffers(handle);
-            }
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, glBlitFramebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, GlTextureAccess.id(target.getColorTexture()), 0);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, 0);
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            GL30.glBlitFramebuffer(0, 0, target.width, target.height,
+                    0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, 0);
+            GLFW.glfwSwapBuffers(handle);
         } finally {
             GLFW.glfwMakeContextCurrent(mainHandle);
             GL.setCapabilities(mainCapabilities);
+        }
+    }
+
+    private void presentSurface(int width, int height) {
+        try {
+            if (surfaceInvalid || configuredWidth != width || configuredHeight != height || surface.isSuboptimal()) {
+                GpuSurface.PresentMode mode = GpuSurface.PresentMode.getSupportedVsyncMode(
+                        surface.supportedPresentModes(), false);
+                surface.configure(new GpuSurface.Configuration(width, height, mode));
+                configuredWidth = width;
+                configuredHeight = height;
+                surfaceInvalid = false;
+            }
+            surface.acquireNextTexture();
+            var encoder = RenderSystem.getDevice().createCommandEncoder();
+            surface.blitFromTexture(encoder, target.getColorTextureView());
+            encoder.submit();
+            surface.present();
+        } catch (SurfaceException exception) {
+            surfaceInvalid = true;
+            LOGGER.warn("Could not present MultiScreen X-ray window {}", number, exception);
         }
     }
 
@@ -145,41 +201,47 @@ final class ExtraWindow implements AutoCloseable {
 
     private void createWindow() {
         long mainHandle = minecraft.getWindow().handle();
-        GLCapabilities mainCapabilities = GL.getCapabilities();
+        GLCapabilities mainCapabilities = openGl ? GL.getCapabilities() : null;
         GLFW.glfwDefaultWindowHints();
-        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR,
-                GLFW.glfwGetWindowAttrib(mainHandle, GLFW.GLFW_CONTEXT_VERSION_MAJOR));
-        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR,
-                GLFW.glfwGetWindowAttrib(mainHandle, GLFW.GLFW_CONTEXT_VERSION_MINOR));
-        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,
-                GLFW.glfwGetWindowAttrib(mainHandle, GLFW.GLFW_OPENGL_PROFILE));
-        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT,
-                GLFW.glfwGetWindowAttrib(mainHandle, GLFW.GLFW_OPENGL_FORWARD_COMPAT));
+        if (openGl) {
+            GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_OPENGL_API);
+            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
+            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3);
+            GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
+            GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_TRUE);
+        } else {
+            GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_NO_API);
+        }
         GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, GLFW.GLFW_TRUE);
         GLFW.glfwWindowHint(GLFW.GLFW_FOCUSED, GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_FOCUS_ON_SHOW, GLFW.GLFW_FALSE);
         long newHandle = GLFW.glfwCreateWindow(profile.windowWidth, profile.windowHeight,
-                "MultiScreen X-ray " + number + " - " + profile.name, 0L, mainHandle);
+                "MultiScreen X-ray " + number + " - " + profile.name, 0L, openGl ? mainHandle : 0L);
         if (newHandle == 0L) throw new IllegalStateException("Could not create X-ray window " + number);
-        if (profile.windowX != Integer.MIN_VALUE && profile.windowY != Integer.MIN_VALUE)
-            GLFW.glfwSetWindowPos(newHandle, profile.windowX, profile.windowY);
+
         try {
-            GLFW.glfwMakeContextCurrent(newHandle);
-            capabilities = GL.createCapabilities();
-            XrayConfig config = ConfigManager.get();
-            xrayRenderer = new XrayWorldRenderer(profile, config.scanRadiusChunks, config.verticalRadius);
-            overlayBlitter = new OverlayBlitter();
-            rendererInvalid = false;
-            GLFW.glfwSwapInterval(0);
+            if (profile.windowX != Integer.MIN_VALUE && profile.windowY != Integer.MIN_VALUE) {
+                GLFW.glfwSetWindowPos(newHandle, profile.windowX, profile.windowY);
+            }
+            if (openGl) {
+                GLFW.glfwMakeContextCurrent(newHandle);
+                capabilities = GL.createCapabilities();
+                glBlitFramebuffer = GL30.glGenFramebuffers();
+                GLFW.glfwSwapInterval(0);
+                GLFW.glfwMakeContextCurrent(mainHandle);
+                GL.setCapabilities(mainCapabilities);
+            }
             handle = newHandle;
+            if (!openGl) surface = RenderSystem.getDevice().createSurface(newHandle);
+            overlayBlitter = new OverlayBlitter();
             installWindowCallbacks(newHandle, mainHandle);
         } catch (RuntimeException exception) {
+            if (openGl) {
+                GLFW.glfwMakeContextCurrent(mainHandle);
+                GL.setCapabilities(mainCapabilities);
+            }
             GLFW.glfwDestroyWindow(newHandle);
-            capabilities = null;
             throw exception;
-        } finally {
-            GLFW.glfwMakeContextCurrent(mainHandle);
-            GL.setCapabilities(mainCapabilities);
         }
     }
 
@@ -188,25 +250,25 @@ final class ExtraWindow implements AutoCloseable {
         if (handle == 0L) return;
         LOGGER.info("Closing MultiScreen X-ray window {}", number);
         rememberWindowGeometry();
-        if (overlayRenderer != null) {
-            overlayRenderer.close();
-            overlayRenderer = null;
-        }
-        long previousContext = GLFW.glfwGetCurrentContext();
-        GLCapabilities previousCapabilities = previousContext == 0L ? null : GL.getCapabilities();
-        try {
+        if (overlayRenderer != null) overlayRenderer.close();
+        if (xrayRenderer != null) xrayRenderer.close();
+        if (overlayBlitter != null) overlayBlitter.close();
+        if (target != null) target.destroyBuffers();
+        if (surface != null) surface.close();
+
+        if (openGl && glBlitFramebuffer != 0) {
+            long mainHandle = minecraft.getWindow().handle();
+            GLCapabilities mainCapabilities = GL.getCapabilities();
             GLFW.glfwMakeContextCurrent(handle);
             GL.setCapabilities(capabilities);
-            if (xrayRenderer != null) xrayRenderer.close();
-            if (overlayBlitter != null) overlayBlitter.close();
-        } finally {
-            GLFW.glfwMakeContextCurrent(previousContext);
-            GL.setCapabilities(previousCapabilities);
-            Callbacks.glfwFreeCallbacks(handle);
-            GLFW.glfwDestroyWindow(handle);
-            handle = 0L;
-            capabilities = null;
+            GL30.glDeleteFramebuffers(glBlitFramebuffer);
+            GLFW.glfwMakeContextCurrent(mainHandle);
+            GL.setCapabilities(mainCapabilities);
         }
+        Callbacks.glfwFreeCallbacks(handle);
+        GLFW.glfwDestroyWindow(handle);
+        handle = 0L;
+        capabilities = null;
     }
 
     private void rememberWindowGeometry() {
@@ -245,7 +307,10 @@ final class ExtraWindow implements AutoCloseable {
             waitForTitlebarRelease = !insideContent;
         };
         positionCallback = (ignored, x, y) -> markGeometryChanged();
-        sizeCallback = (ignored, width, height) -> markGeometryChanged();
+        sizeCallback = (ignored, width, height) -> {
+            markGeometryChanged();
+            surfaceInvalid = true;
+        };
         GLFW.glfwSetWindowFocusCallback(window, focusCallback);
         GLFW.glfwSetWindowPosCallback(window, positionCallback);
         GLFW.glfwSetWindowSizeCallback(window, sizeCallback);
@@ -261,35 +326,6 @@ final class ExtraWindow implements AutoCloseable {
                 && GLFW.glfwGetWindowAttrib(handle, GLFW.GLFW_ICONIFIED) == GLFW.GLFW_FALSE
                 && System.nanoTime() - geometryChangedAt > 500_000_000L) {
             rememberWindowGeometry();
-        }
-    }
-
-    private void captureForTest(int width, int height) {
-        long now = System.nanoTime();
-        if (debugCaptured || !("1".equals(System.getenv("MSXRAY_CAPTURE"))
-                || Boolean.getBoolean("multiscreenxray.capture"))
-                || now - openedAt <= 10_000_000_000L) return;
-        debugCaptured = true;
-        ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-        GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
-            int offset = (y * width + x) * 4;
-            int red = pixels.get(offset) & 255;
-            int green = pixels.get(offset + 1) & 255;
-            int blue = pixels.get(offset + 2) & 255;
-            int alpha = pixels.get(offset + 3) & 255;
-            image.setRGB(x, height - 1 - y, alpha << 24 | red << 16 | green << 8 | blue);
-        }
-        Path path = minecraft.gameDirectory.toPath().resolve("screenshots")
-                .resolve("multiscreenxray-window-" + number + ".png");
-        try {
-            Files.createDirectories(path.getParent());
-            ImageIO.write(image, "png", path.toFile());
-            LOGGER.info("Captured X-ray window {} at {}", number, path);
-        } catch (IOException exception) {
-            LOGGER.error("Could not capture X-ray window {}", number, exception);
         }
     }
 }

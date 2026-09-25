@@ -10,9 +10,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ScreenEffectRenderer.class)
 public abstract class ScreenEffectRendererMixin {
-    @Inject(method = "renderScreenEffect", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "submit", at = @At("HEAD"), cancellable = true)
     private void multiscreenxray$skipFullScreenBlockEffect(
-            boolean sleeping, float partialTick, SubmitNodeCollector collector, CallbackInfo callback) {
+            boolean firstPerson, boolean sleeping, float partialTick,
+            SubmitNodeCollector collector, boolean hideGui, CallbackInfo callback) {
         if (XrayOverlayPass.active()) {
             callback.cancel();
         }

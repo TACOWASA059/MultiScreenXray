@@ -45,7 +45,6 @@ jobs:
           github-generate-changelog: true
           files: |
             fabric/build/libs/!(*-@(sources|javadoc)).jar
-            forge/build/libs/!(*-@(sources|javadoc)).jar
             neoforge/build/libs/!(*-@(sources|javadoc)).jar
           name: MultiScreen X-ray ${{ steps.versions.outputs.mod }} for Minecraft ${{ steps.versions.outputs.minecraft }}
           version: ${{ github.ref_name }}

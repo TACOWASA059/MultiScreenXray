@@ -41,7 +41,7 @@ public final class ProfileMatcher {
         if (allEntities) return true;
         Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         if (entityIds.contains(id)) return true;
-        for (TagKey<EntityType<?>> tag : entityTags) if (entity.getType().is(tag)) return true;
+        for (TagKey<EntityType<?>> tag : entityTags) if (entity.getType().builtInRegistryHolder().is(tag)) return true;
         return false;
     }
 

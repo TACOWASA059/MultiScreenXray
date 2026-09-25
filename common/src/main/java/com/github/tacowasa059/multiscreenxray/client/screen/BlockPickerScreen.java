@@ -2,7 +2,7 @@ package com.github.tacowasa059.multiscreenxray.client.screen;
 
 import com.github.tacowasa059.multiscreenxray.config.ConfigManager;
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -92,22 +92,22 @@ final class BlockPickerScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fillGradient(0, 0, width, height, 0xFF101A26, 0xFF070B11);
         int panelX = gridX - 8;
         graphics.fill(panelX, 4, gridX + gridWidth + 8, height - 3, PANEL);
         graphics.fill(panelX, 4, gridX + gridWidth + 8, 6, 0xFF13677D);
         // Screen renders the active blur before its widgets. Draw the custom
         // library after that pass so its labels and item icons stay sharp.
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawString(font, "BLOCK LIBRARY", gridX, 11, ACCENT, false);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.text(font, "BLOCK LIBRARY", gridX, 11, ACCENT, false);
         String count = selected.size() + " SELECTED";
-        graphics.drawString(font, count, gridX + gridWidth - font.width(count), 11, 0xFF9AABBD, false);
+        graphics.text(font, count, gridX + gridWidth - font.width(count), 11, 0xFF9AABBD, false);
         renderTagChips(graphics, mouseX, mouseY);
         renderBlockGrid(graphics, mouseX, mouseY);
     }
 
-    private void renderTagChips(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void renderTagChips(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         int gap = 3;
         int quickColumns = 4;
         int chipWidth = (gridWidth - gap * (quickColumns - 1)) / quickColumns;
@@ -119,12 +119,12 @@ final class BlockPickerScreen extends Screen {
             boolean hovered = inside(mouseX, mouseY, x, y, chipWidth, 25);
             graphics.fill(x, y, x + chipWidth, y + 25, active ? TAG_COLORS[index] : hovered ? 0xFF28394B : 0xFF1C2633);
             if (active) graphics.fill(x, y + 23, x + chipWidth, y + 25, ACCENT);
-            graphics.renderItem(new ItemStack(option.item), x + 4, y + 4);
-            graphics.drawString(font, option.label, x + 23, y + 9, 0xFFE6F4FA, false);
+            graphics.item(new ItemStack(option.item), x + 4, y + 4);
+            graphics.text(font, option.label, x + 23, y + 9, 0xFFE6F4FA, false);
         }
     }
 
-    private void renderBlockGrid(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void renderBlockGrid(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         List<BlockEntry> filtered = filteredBlocks();
         int columns = Math.max(1, gridWidth / TILE_WIDTH);
         int cellWidth = gridWidth / columns;
@@ -148,10 +148,10 @@ final class BlockPickerScreen extends Screen {
                 graphics.fill(x, y, x + cellWidth - 3, y + 2, ACCENT);
                 graphics.fill(x, y, x + 2, y + TILE_HEIGHT - 3, ACCENT);
             }
-            graphics.renderItem(entry.stack, x + 5, y + 5);
+            graphics.item(entry.stack, x + 5, y + 5);
             String label = font.plainSubstrByWidth(entry.name.getString(), cellWidth - 36);
-            graphics.drawString(font, label, x + 25, y + 9, active ? 0xFFFFFFFF : 0xFFD0DAE5, false);
-            if (active) graphics.drawString(font, "+", x + cellWidth - 12, y + 9, 0xFFFFFFFF, false);
+            graphics.text(font, label, x + 25, y + 9, active ? 0xFFFFFFFF : 0xFFD0DAE5, false);
+            if (active) graphics.text(font, "+", x + cellWidth - 12, y + 9, 0xFFFFFFFF, false);
         }
         graphics.disableScissor();
 
@@ -239,11 +239,11 @@ final class BlockPickerScreen extends Screen {
         profile.blocks = new ArrayList<>(selected);
         profile.preset = "custom";
         ConfigManager.changed();
-        if (minecraft != null) minecraft.setScreen(new XraySettingsScreen(screenIndex));
+        if (minecraft != null) minecraft.gui.setScreen(new XraySettingsScreen(screenIndex));
     }
 
     private void cancel() {
-        if (minecraft != null) minecraft.setScreen(new XraySettingsScreen(screenIndex));
+        if (minecraft != null) minecraft.gui.setScreen(new XraySettingsScreen(screenIndex));
     }
 
     @Override public void onClose() { cancel(); }

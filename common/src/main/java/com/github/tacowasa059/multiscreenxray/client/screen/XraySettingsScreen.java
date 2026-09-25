@@ -7,7 +7,7 @@ import com.github.tacowasa059.multiscreenxray.config.XrayConfig;
 import com.github.tacowasa059.multiscreenxray.config.XrayPresets;
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.EditBox;
@@ -188,7 +188,7 @@ public final class XraySettingsScreen extends Screen {
         if (target == selected) return;
         storeAndSave();
         selected = target;
-        if (minecraft != null) minecraft.setScreen(new XraySettingsScreen(selected));
+        if (minecraft != null) minecraft.gui.setScreen(new XraySettingsScreen(selected));
     }
 
     private void applyPreset(String preset) {
@@ -199,12 +199,12 @@ public final class XraySettingsScreen extends Screen {
 
     private void openBlockPicker() {
         storeAndSave();
-        if (minecraft != null) minecraft.setScreen(new BlockPickerScreen(selected));
+        if (minecraft != null) minecraft.gui.setScreen(new BlockPickerScreen(selected));
     }
 
     private void openEntityPicker() {
         storeAndSave();
-        if (minecraft != null) minecraft.setScreen(new EntityPickerScreen(selected));
+        if (minecraft != null) minecraft.gui.setScreen(new EntityPickerScreen(selected));
     }
 
     private void storeFields() {
@@ -227,7 +227,7 @@ public final class XraySettingsScreen extends Screen {
         ConfigManager.changed();
         if (minecraft != null) {
             MultiWindowManager.applyConfig(minecraft);
-            minecraft.setScreen(new XraySettingsScreen(selected));
+            minecraft.gui.setScreen(new XraySettingsScreen(selected));
         }
     }
 
@@ -246,19 +246,19 @@ public final class XraySettingsScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(panelX, 4, panelX + panelWidth, height - 3, PANEL);
         graphics.fill(panelX, 4, panelX + panelWidth, 6, ACCENT_DARK);
-        graphics.drawString(font, "MULTISCREEN", panelX + 10, 11, ACCENT, false);
-        graphics.drawString(font, "X-RAY", panelX + 83, 11, 0xFFFFFFFF, false);
+        graphics.text(font, "MULTISCREEN", panelX + 10, 11, ACCENT, false);
+        graphics.text(font, "X-RAY", panelX + 83, 11, 0xFFFFFFFF, false);
         int activeScreens = ConfigManager.get().windowCount;
         String status = activeScreens == 0 ? "NO ACTIVE WINDOWS" : "SCREEN " + (selected + 1) + " / " + activeScreens;
-        graphics.drawString(font, status, panelX + panelWidth - font.width(status) - 10, 11, MUTED, false);
+        graphics.text(font, status, panelX + panelWidth - font.width(status) - 10, 11, MUTED, false);
         if (activeScreens == 0) {
-            graphics.drawCenteredString(font, "No X-ray windows are open", width / 2, 84, 0xFFD8E1EB);
-            graphics.drawCenteredString(font, "Use + or F8 to add one", width / 2, 101, MUTED);
+            graphics.centeredText(font, "No X-ray windows are open", width / 2, 84, 0xFFD8E1EB);
+            graphics.centeredText(font, "Use + or F8 to add one", width / 2, 101, MUTED);
         }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override
@@ -267,7 +267,7 @@ public final class XraySettingsScreen extends Screen {
         int currentWindowCount = ConfigManager.get().windowCount;
         if (currentWindowCount != observedWindowCount && minecraft != null) {
             storeAndSave();
-            minecraft.setScreen(new XraySettingsScreen(Math.min(selected, Math.max(0, currentWindowCount - 1))));
+            minecraft.gui.setScreen(new XraySettingsScreen(Math.min(selected, Math.max(0, currentWindowCount - 1))));
         }
     }
 
@@ -290,7 +290,7 @@ public final class XraySettingsScreen extends Screen {
         @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
             int color = !active ? 0x88404A56 : accent ? (isHoveredOrFocused() ? 0xFF5DE2FF : ACCENT_DARK)
                     : (isHoveredOrFocused() ? CARD_HOVER : CARD);
             graphics.fill(getX(), getY(), getX() + width, getY() + height, color);
@@ -301,7 +301,7 @@ public final class XraySettingsScreen extends Screen {
             if (!showText) textWidth = 0;
             int start = getX() + Math.max(5, (width - textWidth - iconWidth) / 2);
             if (icon != null) drawIcon(graphics, icon, start, getY() + height / 2 - 4, active ? 0xFFFFFFFF : MUTED);
-            if (showText) graphics.drawString(Minecraft.getInstance().font, getMessage(), start + iconWidth,
+            if (showText) graphics.text(Minecraft.getInstance().font, getMessage(), start + iconWidth,
                     getY() + (height - 8) / 2, active ? 0xFFFFFFFF : MUTED, false);
         }
 
@@ -323,14 +323,14 @@ public final class XraySettingsScreen extends Screen {
         @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
             int color = selected ? ACCENT_DARK : isHoveredOrFocused() ? CARD_HOVER : CARD;
             graphics.fill(getX(), getY(), getX() + width, getY() + height, color);
             int cx = getX() + width / 2;
             graphics.fill(cx - 7, getY() + 4, cx + 7, getY() + 14, selected ? 0xFFFFFFFF : MUTED);
             graphics.fill(cx - 5, getY() + 6, cx + 5, getY() + 12, selected ? 0xFF10202A : 0xFF1C2633);
             graphics.fill(cx - 1, getY() + 14, cx + 1, getY() + 17, selected ? 0xFFFFFFFF : MUTED);
-            graphics.drawCenteredString(Minecraft.getInstance().font, Integer.toString(number), cx, getY() + 6,
+            graphics.centeredText(Minecraft.getInstance().font, Integer.toString(number), cx, getY() + 6,
                     selected ? ACCENT : 0xFFD8E1EB);
             if (selected) graphics.fill(getX(), getY() + height - 2, getX() + width, getY() + height, ACCENT);
         }
@@ -353,15 +353,15 @@ public final class XraySettingsScreen extends Screen {
         @Override public void onPress(InputWithModifiers input) { action.run(); }
 
         @Override
-        protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
             graphics.fill(getX(), getY(), getX() + width, getY() + height,
                     selected ? 0xFF173A48 : isHoveredOrFocused() ? CARD_HOVER : CARD);
             if (selected) {
                 graphics.fill(getX(), getY(), getX() + 2, getY() + height, ACCENT);
                 graphics.fill(getX(), getY() + height - 2, getX() + width, getY() + height, ACCENT);
             }
-            graphics.renderItem(item, getX() + width / 2 - 8, getY() + 5);
-            graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(), getX() + width / 2,
+            graphics.item(item, getX() + width / 2 - 8, getY() + 5);
+            graphics.centeredText(Minecraft.getInstance().font, getMessage(), getX() + width / 2,
                     getY() + 27, selected ? 0xFFFFFFFF : 0xFFCAD4DF);
         }
 
@@ -448,7 +448,7 @@ public final class XraySettingsScreen extends Screen {
         }
 
         @Override
-        public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        public void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
             int x = getX();
             int y = getY();
             graphics.fill(x, y, x + width, y + height, isHoveredOrFocused() ? CARD_HOVER : CARD);
@@ -460,12 +460,12 @@ public final class XraySettingsScreen extends Screen {
             graphics.fill(trackLeft, trackY, knobX, trackY + 2, ACCENT_DARK);
             graphics.fill(knobX - 2, trackY - 2, knobX + 2, trackY + 4, ACCENT);
             drawIcon(graphics, icon, x + 7, y + 5, 0xFFD8E1EB);
-            graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(), x + width / 2, y + 6,
+            graphics.centeredText(Minecraft.getInstance().font, getMessage(), x + width / 2, y + 6,
                     0xFFFFFFFF);
         }
     }
 
-    private static void drawIcon(GuiGraphics graphics, Icon icon, int x, int y, int color) {
+    private static void drawIcon(GuiGraphicsExtractor graphics, Icon icon, int x, int y, int color) {
         switch (icon) {
             case PLUS -> { graphics.fill(x + 4, y, x + 6, y + 10, color); graphics.fill(x, y + 4, x + 10, y + 6, color); }
             case MINUS -> graphics.fill(x, y + 4, x + 10, y + 6, color);

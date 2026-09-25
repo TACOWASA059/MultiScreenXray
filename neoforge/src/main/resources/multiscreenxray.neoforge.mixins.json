@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.github.tacowasa059.multiscreenxray.neoforge.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "VulkanEarlyWindowMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

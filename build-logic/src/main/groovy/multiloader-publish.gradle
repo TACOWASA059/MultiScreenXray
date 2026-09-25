@@ -6,8 +6,7 @@ plugins {
 }
 
 def loader = project.name
-def loaderName = ['fabric': 'Fabric', 'forge': 'Forge', 'neoforge': 'NeoForge']
-        .getOrDefault(loader, loader.capitalize())
+def loaderName = ['fabric': 'Fabric', 'neoforge': 'NeoForge'].getOrDefault(loader, loader.capitalize())
 def supportedVersions = supported_versions.split(',').collect { it.trim() }.findAll { it }
 def releaseNotes = "${mod_name} ${version} for Minecraft ${minecraft_version}." as String
 def changelogFile = rootProject.file('CHANGELOG.md')
@@ -16,14 +15,10 @@ if (changelogFile.exists()) {
     releaseNotes = section.find() ? section.group(1).trim() : releaseNotes
 }
 
-def uploadTask = loader == 'fabric' ? 'remapJar' : 'jar'
-def uploadJar = loader == 'fabric'
-        ? tasks.named('remapJar')
-        : tasks.named('jar')
+def uploadTask = 'jar'
+def uploadJar = layout.buildDirectory.file("libs/${mod_id}-${loader}-${minecraft_version}-${version}.jar")
 def resolveUploadFile = {
-    loader == 'fabric'
-            ? tasks.named('remapJar').get().archiveFile.get().asFile
-            : tasks.named('jar').get().archiveFile.get().asFile
+    uploadJar.get().asFile
 }
 
 modrinth {
@@ -36,9 +31,7 @@ modrinth {
     loaders = [loader]
     changelog = releaseNotes
     if (loader == 'fabric') {
-        dependencies {
-            required.project 'fabric-api'
-        }
+        dependencies { required.project 'fabric-api' }
     }
 }
 
@@ -47,9 +40,7 @@ tasks.named('modrinth') {
     dependsOn rootProject.tasks.named('configureModrinthEnvironment')
     finalizedBy rootProject.tasks.named('verifyModrinthEnvironment')
     doFirst {
-        if (!System.getenv('MODRINTH_TOKEN')) {
-            throw new GradleException('MODRINTH_TOKEN is not set.')
-        }
+        if (!System.getenv('MODRINTH_TOKEN')) throw new GradleException('MODRINTH_TOKEN is not set.')
     }
 }
 
@@ -59,9 +50,7 @@ tasks.register('publishCurseForge', TaskPublishCurseForge) {
     dependsOn uploadTask
     apiToken = System.getenv('CURSEFORGE_TOKEN')
     doFirst {
-        if (!System.getenv('CURSEFORGE_TOKEN')) {
-            throw new GradleException('CURSEFORGE_TOKEN is not set.')
-        }
+        if (!System.getenv('CURSEFORGE_TOKEN')) throw new GradleException('CURSEFORGE_TOKEN is not set.')
     }
     def mainFile = upload(curseforge_id, uploadJar)
     mainFile.releaseType = release_type
@@ -69,12 +58,8 @@ tasks.register('publishCurseForge', TaskPublishCurseForge) {
     mainFile.changelogType = 'markdown'
     mainFile.addModLoader(loaderName)
     supportedVersions.each { mainFile.addGameVersion(it) }
-    curseforge_environments.split(',').collect { it.trim() }.findAll { it }.each {
-        mainFile.addGameVersion(it)
-    }
-    if (loader == 'fabric') {
-        mainFile.addRequirement('fabric-api')
-    }
+    curseforge_environments.split(',').collect { it.trim() }.findAll { it }.each { mainFile.addGameVersion(it) }
+    if (loader == 'fabric') mainFile.addRequirement('fabric-api')
 }
 
 tasks.register('printPublishArtifact') {

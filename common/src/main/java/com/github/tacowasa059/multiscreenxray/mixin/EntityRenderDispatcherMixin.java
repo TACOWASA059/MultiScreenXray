@@ -1,10 +1,10 @@
 package com.github.tacowasa059.multiscreenxray.mixin;
 
 import com.github.tacowasa059.multiscreenxray.client.render.XrayOverlayPass;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,7 +25,7 @@ public abstract class EntityRenderDispatcherMixin {
     private <E extends Entity> void multiscreenxray$fullBrightEntity(E entity, float partialTick,
             CallbackInfoReturnable<EntityRenderState> callback) {
         if (XrayOverlayPass.active() && callback.getReturnValue() != null) {
-            callback.getReturnValue().lightCoords = LightTexture.FULL_BRIGHT;
+            callback.getReturnValue().lightCoords = LightCoordsUtil.FULL_BRIGHT;
         }
     }
 }
