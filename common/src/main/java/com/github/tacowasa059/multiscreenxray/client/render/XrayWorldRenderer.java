@@ -1,15 +1,15 @@
 package com.github.tacowasa059.multiscreenxray.client.render;
 
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
-import com.mojang.blaze3d.PrimitiveTopology;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.Camera;
@@ -62,8 +62,10 @@ public final class XrayWorldRenderer implements AutoCloseable {
             .withVertexShader("core/position_tex_color")
             .withFragmentShader("core/position_tex_color")
             .withBindGroupLayout(BindGroupLayouts.GLOBALS)
-            .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+            .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
             .withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+            .withColorTargetState(ColorTargetState.DEFAULT)
             .withCull(true)
             .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
             .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
@@ -174,28 +176,29 @@ public final class XrayWorldRenderer implements AutoCloseable {
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(viewMatrix);
         GpuBufferSlice oreTransform = RenderSystem.getDynamicUniforms().writeTransform(
                 viewMatrix, new Vector4f(profile.brightness, profile.brightness, profile.brightness, 1.0f));
+        GpuBufferSlice projectionBuffer = projection.getBuffer(projectionMatrix);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "MultiScreen X-ray world", target.getColorTextureView(), Optional.empty(),
                 target.getDepthTextureView(), OptionalDouble.empty())) {
             if (profile.showOutlines && outlineBuffer != null && outlineVertexCount > 0) {
-                bindCommon(pass, COLOR_LINES, transform, projectionMatrix);
+                bindCommon(pass, COLOR_LINES, transform, projectionBuffer);
                 pass.setVertexBuffer(0, outlineBuffer.slice());
                 pass.draw(outlineVertexCount, 1, 0, 0);
             }
             if (vertexBuffer != null && vertexCount > 0) {
-                bindCommon(pass, ORE_PIPELINE, oreTransform, projectionMatrix);
+                bindCommon(pass, ORE_PIPELINE, oreTransform, projectionBuffer);
                 var atlas = minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS);
-                pass.bindTexture("Sampler0", atlas.getTextureView(), atlas.getSampler());
+                pass.setUniform("Sampler0", atlas.getTextureView(), atlas.getSampler());
                 pass.setVertexBuffer(0, vertexBuffer.slice());
                 pass.draw(vertexCount, 1, 0, 0);
             }
             if (oreBorderBuffer != null && oreBorderVertexCount > 0) {
-                bindCommon(pass, COLOR_LINES, transform, projectionMatrix);
+                bindCommon(pass, COLOR_LINES, transform, projectionBuffer);
                 pass.setVertexBuffer(0, oreBorderBuffer.slice());
                 pass.draw(oreBorderVertexCount, 1, 0, 0);
             }
             if (profile.showFluids && fluidBuffer != null && fluidVertexCount > 0) {
-                bindCommon(pass, COLOR_TRIANGLES, transform, projectionMatrix);
+                bindCommon(pass, COLOR_TRIANGLES, transform, projectionBuffer);
                 pass.setVertexBuffer(0, fluidBuffer.slice());
                 pass.draw(fluidVertexCount, 1, 0, 0);
             }
@@ -542,7 +545,8 @@ public final class XrayWorldRenderer implements AutoCloseable {
                 .withVertexShader("core/position_color")
                 .withFragmentShader("core/position_color")
                 .withBindGroupLayout(BindGroupLayouts.GLOBALS)
-                .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+                .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
                 .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
                 .withCull(false)
                 .withVertexBinding(0, DefaultVertexFormat.POSITION_COLOR)
@@ -551,10 +555,10 @@ public final class XrayWorldRenderer implements AutoCloseable {
     }
 
     private void bindCommon(RenderPass pass, RenderPipeline pipeline, GpuBufferSlice transform,
-                            Matrix4f projectionMatrix) {
-        pass.setPipeline(pipeline);
+                            GpuBufferSlice projectionBuffer) {
+        pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
         RenderSystem.bindDefaultUniforms(pass);
-        pass.setUniform("Projection", projection.getBuffer(projectionMatrix));
+        pass.setUniform("Projection", projectionBuffer);
         pass.setUniform("DynamicTransforms", transform);
     }
 

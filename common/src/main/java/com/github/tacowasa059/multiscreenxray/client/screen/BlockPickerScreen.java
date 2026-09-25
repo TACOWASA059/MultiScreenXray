@@ -2,6 +2,7 @@ package com.github.tacowasa059.multiscreenxray.client.screen;
 
 import com.github.tacowasa059.multiscreenxray.config.ConfigManager;
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -177,7 +178,7 @@ final class BlockPickerScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
-        if (button != 0) return false;
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) return false;
         int gap = 3;
         int quickColumns = 4;
         int chipWidth = (gridWidth - gap * (quickColumns - 1)) / quickColumns;

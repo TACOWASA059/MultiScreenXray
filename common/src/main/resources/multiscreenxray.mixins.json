@@ -9,7 +9,8 @@
     "ScreenEffectRendererMixin",
     "EntityRenderDispatcherMixin",
     "GameRendererMixin",
-    "DebugRendererMixin"
+    "DebugRendererMixin",
+    "WindowEventMixin"
   ],
   "injectors": {
     "defaultRequire": 1

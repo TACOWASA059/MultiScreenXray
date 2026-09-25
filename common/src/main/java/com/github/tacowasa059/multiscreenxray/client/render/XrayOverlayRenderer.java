@@ -2,9 +2,9 @@ package com.github.tacowasa059.multiscreenxray.client.render;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.GpuFormat;
+import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.github.tacowasa059.multiscreenxray.config.XrayProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
@@ -24,8 +24,8 @@ public final class XrayOverlayRenderer implements AutoCloseable {
         this.minecraft = minecraft;
         this.profile = profile.copy();
         this.target = new TextureTarget("MultiScreen X-ray overlay",
-                minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(), true,
-                GpuFormat.RGBA8_UNORM);
+                minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(),
+                GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
     }
 
     public Frame render(int width, int height) {
@@ -49,7 +49,7 @@ public final class XrayOverlayRenderer implements AutoCloseable {
             windowState.width = width;
             windowState.height = height;
             extractSelectedEntities();
-            minecraft.gameRenderer.renderLevel(minecraft.getDeltaTracker());
+            minecraft.gameRenderer.renderLevel();
             worldFov = pass.worldFov();
         } finally {
             cameraState.projectionMatrix.set(previousProjection);
@@ -69,7 +69,8 @@ public final class XrayOverlayRenderer implements AutoCloseable {
         levelState.entityRenderStates.clear();
         Entity cameraEntity = minecraft.gameRenderer.mainCamera().entity();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
-            if (entity == cameraEntity || !XrayOverlayPass.visible(entity)) continue;
+            if (entity == cameraEntity && minecraft.options.getCameraType().isFirstPerson()
+                    || !XrayOverlayPass.visible(entity)) continue;
             float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(
                     !minecraft.level.tickRateManager().isEntityFrozen(entity));
             levelState.entityRenderStates.add(

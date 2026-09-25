@@ -1,5 +1,5 @@
 {
-  "key.categories.multiscreenxray": "MultiScreen X-ray",
+  "key.category.multiscreenxray.main": "MultiScreen X-ray",
   "key.multiscreenxray.change_window_count": "ウィンドウを追加（Shift: 削除）",
   "key.multiscreenxray.open_settings": "設定を開く"
 }

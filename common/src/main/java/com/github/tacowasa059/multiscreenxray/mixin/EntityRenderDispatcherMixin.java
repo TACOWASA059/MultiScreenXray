@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class EntityRenderDispatcherMixin {
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
     private <E extends Entity> void multiscreenxray$filterEntity(E entity, Frustum frustum,
-            double cameraX, double cameraY, double cameraZ, CallbackInfoReturnable<Boolean> callback) {
+            double cameraX, double cameraY, double cameraZ, float partialTick, CallbackInfoReturnable<Boolean> callback) {
         if (XrayOverlayPass.active() && !XrayOverlayPass.visible(entity)) {
             callback.setReturnValue(false);
         }

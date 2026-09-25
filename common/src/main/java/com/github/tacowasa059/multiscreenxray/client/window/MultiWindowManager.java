@@ -5,10 +5,13 @@ import com.github.tacowasa059.multiscreenxray.client.screen.XraySettingsScreen;
 import com.github.tacowasa059.multiscreenxray.config.ConfigManager;
 import com.github.tacowasa059.multiscreenxray.config.XrayConfig;
 import com.mojang.logging.LogUtils;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLEvents;
+import org.lwjgl.sdl.SDLVideo;
+import org.lwjgl.sdl.SDL_Event;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -66,16 +69,16 @@ public final class MultiWindowManager {
             ConfigManager.get().windowCount = desiredWindows;
             ConfigManager.changed();
         }
-        boolean addPressed = keyPressedInExtraWindow(GLFW.GLFW_KEY_F8);
+        boolean addPressed = InputConstants.isKeyDown(InputConstants.KEY_F8);
         if (MultiScreenXrayKeyMappings.CHANGE_WINDOW_COUNT.consumeClick()
                 || addPressed && !addKeyDown)
             setWindowCount(minecraft, desiredWindows + (shiftPressedInAnyWindow(minecraft) ? -1 : 1));
         addKeyDown = addPressed;
 
-        boolean settingsPressed = keyPressedInExtraWindow(GLFW.GLFW_KEY_F9);
+        boolean settingsPressed = InputConstants.isKeyDown(InputConstants.KEY_F9);
         if (MultiScreenXrayKeyMappings.OPEN_SETTINGS.consumeClick()
                 || settingsPressed && !settingsKeyDown) {
-            GLFW.glfwFocusWindow(minecraft.getWindow().handle());
+            SDLVideo.SDL_RaiseWindow(minecraft.getWindow().handle());
             minecraft.gui.setScreen(new XraySettingsScreen());
         }
         settingsKeyDown = settingsPressed;
@@ -138,21 +141,22 @@ public final class MultiWindowManager {
         FAILED_WINDOWS.clear();
     }
 
-    private static boolean keyPressedInExtraWindow(int key) {
-        for (ExtraWindow window : WINDOWS)
-            if (GLFW.glfwGetKey(window.handle(), key) == GLFW.GLFW_PRESS) return true;
-        return false;
-    }
-
     private static boolean shiftPressedInAnyWindow(Minecraft minecraft) {
-        if (shiftPressed(minecraft.getWindow().handle())) return true;
-        for (ExtraWindow window : WINDOWS) if (shiftPressed(window.handle())) return true;
-        return false;
+        return InputConstants.isKeyDown(InputConstants.KEY_LSHIFT)
+                || InputConstants.isKeyDown(InputConstants.KEY_RSHIFT);
     }
 
-    private static boolean shiftPressed(long handle) {
-        return GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
-                || GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+    /** Consumes SDL window events belonging to an additional X-ray window. */
+    public static boolean handleWindowEvent(SDL_Event event) {
+        long handle = SDLEvents.SDL_GetWindowFromEvent(event);
+        if (handle == 0L) return false;
+        for (ExtraWindow window : WINDOWS) {
+            if (window.handle() == handle) {
+                window.handleEvent(event);
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void runVisualTestCapture(Minecraft minecraft, boolean rendered) {

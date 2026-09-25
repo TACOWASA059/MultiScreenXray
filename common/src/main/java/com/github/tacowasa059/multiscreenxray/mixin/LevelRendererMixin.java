@@ -1,59 +1,44 @@
 package com.github.tacowasa059.multiscreenxray.mixin;
 
 import com.github.tacowasa059.multiscreenxray.client.render.XrayOverlayPass;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.CloudStatus;
+import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
-import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.client.renderer.LevelRenderer;
-import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.systems.RenderPass;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import org.joml.Matrix4fc;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.world.phys.Vec3;
-import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.List;
+import org.joml.Matrix4fc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.EnumMap;
+import java.util.List;
+
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
-    @Inject(method = "prepareChunkRenders", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipTerrain(Matrix4fc frustumMatrix,
+    @Inject(method = {"prepareChunkRenders", "prepareChunkRendersIndirect"}, at = @At("HEAD"), cancellable = true)
+    private void multiscreenxray$skipTerrain(Matrix4fc terrainMatrix, boolean respectTranslucentOrder,
             CallbackInfoReturnable<ChunkSectionsToRender> callback) {
         if (!XrayOverlayPass.active()) return;
-        EnumMap<ChunkSectionLayer, Int2ObjectOpenHashMap<List<RenderPass.Draw<GpuBufferSlice[]>>>> emptyLayers =
+        EnumMap<ChunkSectionLayer, List<RenderPass.Draw<GpuBufferSlice[]>>> emptyLayers =
                 new EnumMap<>(ChunkSectionLayer.class);
         for (ChunkSectionLayer layer : ChunkSectionLayer.values()) {
-            emptyLayers.put(layer, new Int2ObjectOpenHashMap<>());
+            emptyLayers.put(layer, List.of());
         }
-        callback.setReturnValue(new ChunkSectionsToRender(
-                Minecraft.getInstance().getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView(),
-                emptyLayers, 0, new GpuBufferSlice[0]));
+        GpuBufferSlice terrainTransform = RenderSystem.getDynamicUniforms()
+                .writeTerrainTransform(terrainMatrix, 1, 1);
+        callback.setReturnValue(new ChunkSectionsToRender.DrawSeparate(
+                terrainTransform, emptyLayers, 0, new GpuBufferSlice[0]));
     }
 
     @Inject(method = "addSkyPass", at = @At("HEAD"), cancellable = true)
     private void multiscreenxray$skipSky(FrameGraphBuilder graph, CameraRenderState camera,
             GpuBufferSlice fogBuffer, CallbackInfo callback) {
-        if (XrayOverlayPass.active()) callback.cancel();
-    }
-
-    @Inject(method = "addCloudsPass", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipClouds(FrameGraphBuilder graph, CloudStatus status, Vec3 cameraPosition,
-            long gameTime, float partialTick, int color, float height, int range, CallbackInfo callback) {
-        if (XrayOverlayPass.active()) callback.cancel();
-    }
-
-    @Inject(method = "addWeatherPass", at = @At("HEAD"), cancellable = true)
-    private void multiscreenxray$skipWeather(FrameGraphBuilder graph, GpuBufferSlice fogBuffer,
-            CallbackInfo callback) {
         if (XrayOverlayPass.active()) callback.cancel();
     }
 

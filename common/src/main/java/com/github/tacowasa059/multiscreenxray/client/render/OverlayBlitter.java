@@ -1,16 +1,16 @@
 package com.github.tacowasa059.multiscreenxray.client.render;
 
-import com.mojang.blaze3d.PrimitiveTopology;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -29,7 +29,8 @@ public final class OverlayBlitter implements AutoCloseable {
             .withVertexShader("core/position_tex_color")
             .withFragmentShader("core/position_tex_color")
             .withBindGroupLayout(BindGroupLayouts.GLOBALS)
-            .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+            .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
             .withBindGroupLayout(BindGroupLayouts.SAMPLER0)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
             .withCull(false)
@@ -62,14 +63,15 @@ public final class OverlayBlitter implements AutoCloseable {
     public void draw(RenderTarget target, GpuTextureView texture) {
         if (texture == null || target.getColorTextureView() == null) return;
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f());
+        GpuBufferSlice projectionBuffer = projection.getBuffer(new Matrix4f());
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "MultiScreen X-ray overlay composite",
                 target.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(PIPELINE);
+            pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE));
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("Projection", projection.getBuffer(new Matrix4f()));
+            pass.setUniform("Projection", projectionBuffer);
             pass.setUniform("DynamicTransforms", transform);
-            pass.bindTexture("Sampler0", texture,
+            pass.setUniform("Sampler0", texture,
                     RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
             pass.setVertexBuffer(0, vertices.slice());
             pass.draw(6, 1, 0, 0);
